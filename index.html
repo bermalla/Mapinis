@@ -96,5 +96,45 @@
       </div>
     </main>
   </div>
+
+  <div class="modal-overlay" id="toolEditorModal" hidden>
+    <div class="modal-content">
+      <h2>Editar herramienta</h2>
+      <form id="toolEditorForm">
+        <label>
+          Nombre de la herramienta
+          <input id="toolEditorLabel" type="text" />
+        </label>
+        <label>
+          Texto predeterminado
+          <input id="toolEditorText" type="text" />
+        </label>
+        <label>
+          Texto en paleta
+          <input id="toolEditorPaletteText" type="text" placeholder="Opcional" />
+        </label>
+        <label>
+          Color de relleno
+          <input id="toolEditorFill" type="color" />
+        </label>
+        <label>
+          Color de borde
+          <input id="toolEditorStroke" type="color" />
+        </label>
+        <label>
+          Color de texto
+          <input id="toolEditorTextColor" type="color" />
+        </label>
+        <div class="modal-preview">
+          <div class="modal-preview-label">Vista previa</div>
+          <div id="toolEditorPreview" class="tool-editor-preview"></div>
+        </div>
+        <div class="modal-actions">
+          <button id="toolEditorSave" type="submit">Guardar</button>
+          <button id="toolEditorCancel" type="button">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </body>
 </html>

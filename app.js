@@ -6,18 +6,18 @@ const canvasHeight = rows * gridSize;
 const undoLimit = 10;
 
 const toolDefinitions = [
-  { id: "select", label: "Seleccionar / mover", kind: "select", className: "text", text: "↖" },
-  { id: "path", label: "Camino", fill: "#ffffff", stroke: "#222222", text: "", className: "path" },
-  { id: "closed", label: "Camino cerrado", fill: "#777777", stroke: "#222222", text: "X", className: "closed" },
-  { id: "down", label: "Camino en bajada", fill: "#5c91e6", stroke: "#222222", text: "↓", className: "down" },
-  { id: "drop", label: "Caída", fill: "#2453b3", stroke: "#222222", text: "↓", className: "drop" },
-  { id: "up", label: "Camino en subida", fill: "#29bf55", stroke: "#222222", text: "↑", className: "up" },
-  { id: "verticalBoost", label: "Impulso vertical", fill: "#d9b3ff", stroke: "#6d3aa8", text: "⇧", className: "verticalBoost" },
-  { id: "obstacle", label: "Obstáculo", fill: "#444444", stroke: "#222222", text: "", className: "obstacle" },
-  { id: "mini", label: "Mini sala vacía", fill: "#ffc0c0", stroke: "#ff3d3d", text: "", className: "mini" },
-  { id: "start", label: "Inicio/Fin", fill: "#fff4b8", stroke: "#222222", text: "", className: "start" },
-  { id: "statusBlock", label: "Status", fill: "#ffd84d", stroke: "#222222", text: "", className: "statusBlock" },
-  { id: "note", label: "Texto libre", fill: "transparent", stroke: "transparent", text: "texto", paletteText: "", className: "text" },
+  { id: "select", label: "Seleccionar / mover", kind: "select", className: "text", text: "↖", textColor: "#1f4fa3" },
+  { id: "path", label: "Camino", fill: "#ffffff", stroke: "#222222", text: "", className: "path", textColor: "#1f4fa3" },
+  { id: "closed", label: "Camino cerrado", fill: "#777777", stroke: "#222222", text: "X", className: "closed", textColor: "#ffffff" },
+  { id: "down", label: "Camino en bajada", fill: "#5c91e6", stroke: "#222222", text: "↓", className: "down", textColor: "#ffffff" },
+  { id: "drop", label: "Caída", fill: "#2453b3", stroke: "#222222", text: "↓", className: "drop", textColor: "#ffffff" },
+  { id: "up", label: "Camino en subida", fill: "#29bf55", stroke: "#222222", text: "↑", className: "up", textColor: "#ffffff" },
+  { id: "verticalBoost", label: "Impulso vertical", fill: "#d9b3ff", stroke: "#6d3aa8", text: "⇧", className: "verticalBoost", textColor: "#1f4fa3" },
+  { id: "obstacle", label: "Obstáculo", fill: "#444444", stroke: "#222222", text: "", className: "obstacle", textColor: "#ffffff" },
+  { id: "mini", label: "Mini sala vacía", fill: "#ffc0c0", stroke: "#ff3d3d", text: "", className: "mini", textColor: "#1f4fa3" },
+  { id: "start", label: "Inicio/Fin", fill: "#fff4b8", stroke: "#222222", text: "", className: "start", textColor: "#1f4fa3" },
+  { id: "statusBlock", label: "Status", fill: "#ffd84d", stroke: "#222222", text: "", className: "statusBlock", textColor: "#1f4fa3" },
+  { id: "note", label: "Texto libre", fill: "transparent", stroke: "transparent", text: "texto", paletteText: "", className: "text", textColor: "#222222" },
 ];
 
 let tools = toolDefinitions.map((tool) => ({ ...tool }));
@@ -60,6 +60,19 @@ const jsonInput = document.getElementById("jsonInput");
 const jsonBackup = document.getElementById("jsonBackup");
 const mapScroller = document.getElementById("mapScroller");
 const zoomIndicator = document.getElementById("zoomIndicator");
+const toolEditorModal = document.getElementById("toolEditorModal");
+const toolEditorForm = document.getElementById("toolEditorForm");
+const toolEditorLabel = document.getElementById("toolEditorLabel");
+const toolEditorText = document.getElementById("toolEditorText");
+const toolEditorPaletteText = document.getElementById("toolEditorPaletteText");
+const toolEditorFill = document.getElementById("toolEditorFill");
+const toolEditorStroke = document.getElementById("toolEditorStroke");
+const toolEditorTextColor = document.getElementById("toolEditorTextColor");
+const toolEditorCancel = document.getElementById("toolEditorCancel");
+let toolBeingEdited = null;
+let toolEditorOriginalFill = null;
+let toolEditorOriginalStroke = null;
+let toolEditorOriginalTextColor = null;
 
 function uid() {
   return window.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
@@ -85,6 +98,7 @@ function registerLoadedTool(tool) {
     fill: tool.fill || "#ffffff",
     stroke: tool.stroke || "#222222",
     text: typeof tool.text === "string" ? tool.text : "?",
+    textColor: typeof tool.textColor === "string" ? tool.textColor : "#1f4fa3",
     className: tool.className || "text",
     paletteText: typeof tool.paletteText === "string" ? tool.paletteText : undefined,
   });
@@ -302,28 +316,35 @@ function buildSaveData() {
     toolOrder: tools.map((tool) => tool.id),
     blockCatalog: tools
       .filter((tool) => tool.id !== "select")
-      .map((tool) => ({
-        id: tool.id,
-        label: tool.label,
-        fill: tool.fill,
-        stroke: tool.stroke,
-        text: tool.text,
-        className: tool.className,
-        paletteText: tool.paletteText || "",
-      })),
-    items: items.map((item) => ({
-      id: item.id,
-      type: item.type,
-      col: item.col,
-      row: item.row,
-      w: item.w,
-      h: item.h,
-      text: item.text,
-      rotation: item.rotation,
-      textSize: item.textSize,
-      style: { fill: item.fill, stroke: item.stroke },
-      meta: item.meta || {},
-    })),
+      .map((tool) => {
+        const data = {
+          id: tool.id,
+          label: tool.label,
+          fill: tool.fill,
+          stroke: tool.stroke,
+          text: tool.text,
+          className: tool.className,
+        };
+        if (tool.paletteText) data.paletteText = tool.paletteText;
+        if (typeof tool.textColor === "string" && tool.textColor.length > 0) data.textColor = tool.textColor;
+        return data;
+      }),
+    items: items.map((item) => {
+      return {
+        id: item.id,
+        type: item.type,
+        col: item.col,
+        row: item.row,
+        w: item.w,
+        h: item.h,
+        text: item.text,
+        rotation: item.rotation,
+        textSize: item.textSize,
+        textColor: item.textColor,
+        style: { fill: item.fill, stroke: item.stroke },
+        meta: item.meta || {},
+      };
+    }),
   };
 }
 
@@ -370,6 +391,7 @@ function createItem(toolId, col, row, w = 1, h = 1) {
     text: tool.text || "",
     rotation: 0,
     textSize: tool.textSize || (tool.id === "note" ? 14 : 18),
+    textColor: tool.textColor || "#1f4fa3",
     meta: {},
   };
 }
@@ -408,8 +430,9 @@ function renderPalette() {
     button.draggable = true;
     button.dataset.toolId = tool.id;
     button.className = activeTool === tool.id ? "active" : "";
+    const swatchStyle = `background:${tool.fill}; color:${tool.textColor || "#1f4fa3"}; border-color:${tool.stroke};`;
     button.innerHTML = `
-      <span class="swatch ${tool.className || "text"}">${tool.paletteText ?? tool.text ?? ""}</span>
+      <span class="swatch ${tool.className || "text"}" style="${swatchStyle}">${tool.paletteText ?? tool.text ?? ""}</span>
       <span>${tool.label}</span>
       <span class="hotkey">${getHotkeyForToolIndex(index)}</span>
     `;
@@ -419,6 +442,13 @@ function renderPalette() {
       activeTool = tool.id;
       resetInteractionState();
       render();
+    });
+
+    button.addEventListener("dblclick", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (tool.id === "select") return;
+      openToolEditor(tool);
     });
 
     button.addEventListener("dragstart", (event) => {
@@ -461,6 +491,76 @@ function renderPalette() {
 
     palette.appendChild(button);
   });
+}
+
+function openToolEditor(tool) {
+  toolBeingEdited = tool;
+  toolEditorLabel.value = tool.label || "";
+  toolEditorText.value = tool.text || "";
+  toolEditorPaletteText.value = tool.paletteText || "";
+  toolEditorOriginalFill = tool.fill;
+  toolEditorOriginalStroke = tool.stroke;
+  toolEditorOriginalTextColor = tool.textColor;
+  toolEditorFill.value = /^#([0-9A-Fa-f]{3}){1,2}$/.test(tool.fill) ? tool.fill : "#ffffff";
+  toolEditorStroke.value = /^#([0-9A-Fa-f]{3}){1,2}$/.test(tool.stroke) ? tool.stroke : "#222222";
+  toolEditorTextColor.value = /^#([0-9A-Fa-f]{3}){1,2}$/.test(tool.textColor) ? tool.textColor : "#1f4fa3";
+  toolEditorFill.dataset.touched = "false";
+  toolEditorStroke.dataset.touched = "false";
+  toolEditorTextColor.dataset.touched = "false";
+  toolEditorModal.hidden = false;
+  updateToolEditorPreview();
+}
+
+function closeToolEditor() {
+  toolEditorModal.hidden = true;
+  toolBeingEdited = null;
+}
+
+function updateToolEditorPreview() {
+  const preview = document.getElementById("toolEditorPreview");
+  if (!preview || !toolBeingEdited) return;
+  const fill = toolEditorFill.value || "#ffffff";
+  const stroke = toolEditorStroke.value || "#222222";
+  const textColor = toolEditorTextColor.value || "#1f4fa3";
+  const text = String(toolEditorText.value || toolBeingEdited.text || "").trim() || String(toolEditorPaletteText.value || toolBeingEdited.paletteText || toolBeingEdited.text || "");
+  preview.innerHTML = `<div class="preview-swatch" style="background:${fill};border:2px solid ${stroke};color:${textColor};">${text}</div>`;
+}
+
+function applyToolEditorChanges() {
+  if (!toolBeingEdited) return;
+  const trimmedLabel = String(toolEditorLabel.value || "").trim();
+  if (trimmedLabel) {
+    toolBeingEdited.label = trimmedLabel;
+  }
+  toolBeingEdited.text = String(toolEditorText.value || "");
+  const paletteTextValue = String(toolEditorPaletteText.value || "").trim();
+  toolBeingEdited.paletteText = paletteTextValue || undefined;
+  if (toolEditorFill.dataset.touched === "true" || /^#([0-9A-Fa-f]{3}){1,2}$/.test(toolEditorOriginalFill)) {
+    toolBeingEdited.fill = toolEditorFill.value || toolBeingEdited.fill;
+  } else {
+    toolBeingEdited.fill = toolEditorOriginalFill;
+  }
+  if (toolEditorStroke.dataset.touched === "true" || /^#([0-9A-Fa-f]{3}){1,2}$/.test(toolEditorOriginalStroke)) {
+    toolBeingEdited.stroke = toolEditorStroke.value || toolBeingEdited.stroke;
+  } else {
+    toolBeingEdited.stroke = toolEditorOriginalStroke;
+  }
+  if (toolEditorTextColor.dataset.touched === "true" || /^#([0-9A-Fa-f]{3}){1,2}$/.test(toolEditorOriginalTextColor)) {
+    toolBeingEdited.textColor = toolEditorTextColor.value || toolBeingEdited.textColor;
+  } else {
+    toolBeingEdited.textColor = toolEditorOriginalTextColor;
+  }
+
+  items.forEach((item) => {
+    if (item.type === toolBeingEdited.id) {
+      item.fill = toolBeingEdited.fill;
+      item.stroke = toolBeingEdited.stroke;
+      item.textColor = toolBeingEdited.textColor;
+    }
+  });
+
+  rebuildToolMap();
+  render();
 }
 
 function renderGrid() {
@@ -679,7 +779,8 @@ function renderPathItem(item, isPreview, pathOwners) {
   const centerX = x + w / 2;
   const centerY = y + h / 2;
   const textSize = Number(item.textSize) || 18;
-  const textMarkup = item.text ? renderWrappedText(item, x, y, w, h, centerX, centerY, textSize, "#1f4fa3") : "";
+  const textColor = item.textColor || "#1f4fa3";
+  const textMarkup = item.text ? renderWrappedText(item, x, y, w, h, centerX, centerY, textSize, textColor) : "";
   const selectionMarkup = isSelected && !isPreview ? `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#ff9f1c" stroke-width="3" />${isEditing ? renderResizeHandles(item) : ""}` : "";
 
   return `
@@ -706,7 +807,7 @@ function renderItem(item, isPreview = false, pathOwners = buildPathCellOwners())
   const opacity = isPreview ? 0.55 : 1;
   const centerX = x + w / 2;
   const centerY = y + h / 2;
-  const textColor = ["closed", "down", "drop", "up", "obstacle"].includes(item.type) ? "#ffffff" : "#1f4fa3";
+  const textColor = item.textColor || (["closed", "down", "drop", "up", "obstacle"].includes(item.type) ? "#ffffff" : "#1f4fa3");
   const textSize = Number(item.textSize) || (item.type === "note" ? 14 : 18);
   const textMarkup = item.text ? renderWrappedText(item, x, y, w, h, centerX, centerY, textSize, textColor) : "";
 
@@ -1286,7 +1387,28 @@ function loadJsonFromText(text) {
     const data = JSON.parse(String(text));
     if (!data || !Array.isArray(data.items)) throw new Error("Formato inválido");
     pushUndoState();
-    if (Array.isArray(data.blockCatalog)) data.blockCatalog.forEach(registerLoadedTool);
+    console.log("blockCatalog cargado del JSON:", data.blockCatalog);
+    if (Array.isArray(data.blockCatalog)) {
+      data.blockCatalog.forEach((toolData) => {
+        if (!toolData || !toolData.id) return;
+        const existingTool = tools.find((candidate) => candidate.id === toolData.id);
+        console.log(`Actualizando tool "${toolData.id}": text="${toolData.text}" -> existingTool.text="${existingTool?.text}"`);
+        if (existingTool) {
+          if (typeof toolData.label === "string") existingTool.label = toolData.label;
+          if (typeof toolData.fill === "string") existingTool.fill = toolData.fill;
+          if (typeof toolData.stroke === "string") existingTool.stroke = toolData.stroke;
+          if (typeof toolData.text === "string") existingTool.text = toolData.text;
+          if (typeof toolData.textColor === "string") existingTool.textColor = toolData.textColor;
+          console.log(`  -> Ahora existingTool.text="${existingTool.text}"`);
+          if (typeof toolData.className === "string") existingTool.className = toolData.className;
+          if (typeof toolData.paletteText === "string") existingTool.paletteText = toolData.paletteText;
+        } else {
+          registerLoadedTool(toolData);
+        }
+      });
+      console.log("tools después de cargar blockCatalog:", tools);
+      rebuildToolMap();
+    }
     if (Array.isArray(data.toolOrder)) {
       const ordered = [];
       data.toolOrder.forEach((id) => {
@@ -1303,6 +1425,7 @@ function loadJsonFromText(text) {
     items = data.items.map((item) => {
       const tool = getToolOrFallback(item.type || "path");
       const style = item.style || {};
+      const itemText = typeof item.text === "string" ? item.text : (typeof tool.text === "string" ? tool.text : "");
       return {
         id: item.id || uid(),
         type: item.type || tool.id,
@@ -1312,12 +1435,15 @@ function loadJsonFromText(text) {
         h: Math.max(1, Math.min(rows, Number(item.h) || 1)),
         fill: style.fill || item.fill || tool.fill,
         stroke: style.stroke || item.stroke || tool.stroke,
-        text: typeof item.text === "string" ? item.text : (typeof tool.text === "string" ? tool.text : ""),
+        text: itemText,
         rotation: Number(item.rotation) || 0,
         textSize: Math.max(6, Math.min(72, Number(item.textSize) || (tool.id === "note" ? 14 : 18))),
+        textColor: typeof item.textColor === "string" ? item.textColor : tool.textColor || (tool.id === "note" ? "#222222" : "#1f4fa3"),
         meta: item.meta || {},
       };
     });
+    console.log("tools finales antes de renderizar:", tools);
+    console.log("items cargados:", items);
     resetInteractionState();
     centerViewPending = true;
     render();
@@ -1345,43 +1471,117 @@ jsonInput.addEventListener("change", (event) => {
   reader.readAsText(file);
 });
 
+toolEditorForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!toolBeingEdited) return;
+  pushUndoState();
+  applyToolEditorChanges();
+  closeToolEditor();
+  focusEditor();
+});
+
+toolEditorCancel.addEventListener("click", (event) => {
+  event.preventDefault();
+  closeToolEditor();
+  focusEditor();
+});
+
+toolEditorModal.addEventListener("click", (event) => {
+  if (event.target === toolEditorModal) {
+    closeToolEditor();
+    focusEditor();
+  }
+});
+
+toolEditorFill.addEventListener("input", () => {
+  toolEditorFill.dataset.touched = "true";
+  updateToolEditorPreview();
+});
+
+toolEditorStroke.addEventListener("input", () => {
+  toolEditorStroke.dataset.touched = "true";
+  updateToolEditorPreview();
+});
+
+toolEditorTextColor.addEventListener("input", () => {
+  toolEditorTextColor.dataset.touched = "true";
+  updateToolEditorPreview();
+});
+
+toolEditorText.addEventListener("input", updateToolEditorPreview);
+
+toolEditorPaletteText.addEventListener("input", updateToolEditorPreview);
+
+toolEditorLabel.addEventListener("input", updateToolEditorPreview);
+
+toolEditorStroke.addEventListener("input", () => {
+  toolEditorStroke.dataset.touched = "true";
+});
+
 document.getElementById("exportPng").addEventListener("click", async (event) => {
   event.preventDefault();
   focusEditor();
   await exportMapAsPng();
 });
 
-function buildExportLegendSvg(width, height) {
+function createExportLegendGroup(width, height) {
+  const xmlns = "http://www.w3.org/2000/svg";
   const legendTools = tools.filter((tool) => !["select", "start", "note"].includes(tool.id));
   const padding = 16;
   const itemHeight = 26;
   const swatchSize = 16;
   const labelX = padding + swatchSize + 10;
-  const visibleHeight = legendTools.length * itemHeight;
   const titleHeight = 20;
   const topOffset = padding + titleHeight + 8;
 
-  const legendLines = legendTools
-    .map((tool, index) => {
-      const y = topOffset + index * itemHeight;
-      const fill = tool.fill || "#ffffff";
-      const stroke = tool.stroke || "#222222";
-      return `
-        <g transform="translate(${padding}, ${y})">
-          <rect x="0" y="0" width="${swatchSize}" height="${swatchSize}" fill="${fill}" stroke="${stroke}" stroke-width="1.5" />
-          <text x="${labelX}" y="${swatchSize - 2}" font-family="Arial, sans-serif" font-size="14" fill="#222222">${escapeXml(tool.label)}</text>
-        </g>
-      `;
-    })
-    .join("");
+  const legendGroup = document.createElementNS(xmlns, "g");
 
-  const title = `<text x="${padding}" y="${padding + 14}" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#222222">Leyenda</text>`;
+  const background = document.createElementNS(xmlns, "rect");
+  background.setAttribute("x", "0");
+  background.setAttribute("y", "0");
+  background.setAttribute("width", String(width));
+  background.setAttribute("height", String(height));
+  background.setAttribute("fill", "#ffffff");
+  legendGroup.appendChild(background);
 
-  return `
-    <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff" />
-    ${title}
-    ${legendLines}
-  `;
+  const title = document.createElementNS(xmlns, "text");
+  title.setAttribute("x", String(padding));
+  title.setAttribute("y", String(padding + 14));
+  title.setAttribute("font-family", "Arial, sans-serif");
+  title.setAttribute("font-size", "16");
+  title.setAttribute("font-weight", "700");
+  title.setAttribute("fill", "#222222");
+  title.textContent = "Leyenda";
+  legendGroup.appendChild(title);
+
+  legendTools.forEach((tool, index) => {
+    const y = topOffset + index * itemHeight;
+    const group = document.createElementNS(xmlns, "g");
+    group.setAttribute("transform", `translate(${padding}, ${y})`);
+
+    const swatch = document.createElementNS(xmlns, "rect");
+    swatch.setAttribute("x", "0");
+    swatch.setAttribute("y", "0");
+    swatch.setAttribute("width", String(swatchSize));
+    swatch.setAttribute("height", String(swatchSize));
+    swatch.setAttribute("fill", tool.fill || "#ffffff");
+    swatch.setAttribute("stroke", tool.stroke || "#222222");
+    swatch.setAttribute("stroke-width", "1.5");
+    group.appendChild(swatch);
+
+    const label = document.createElementNS(xmlns, "text");
+    label.setAttribute("x", String(labelX));
+    label.setAttribute("y", String(swatchSize - 2));
+    label.setAttribute("font-family", "Arial, sans-serif");
+    label.setAttribute("font-size", "14");
+    label.setAttribute("fill", "#222222");
+    label.textContent = tool.label;
+    group.appendChild(label);
+
+    legendGroup.appendChild(group);
+  });
+
+  return legendGroup;
 }
 
 async function exportMapAsPng() {
@@ -1413,8 +1613,7 @@ async function exportMapAsPng() {
     exportSvg.setAttribute("height", String(exportHeight));
     exportSvg.setAttribute("viewBox", `0 0 ${exportWidth} ${exportHeight}`);
 
-    const legendGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    legendGroup.innerHTML = buildExportLegendSvg(legendWidth, exportHeight);
+    const legendGroup = createExportLegendGroup(legendWidth, exportHeight);
     exportSvg.appendChild(legendGroup);
 
     const cloneSvg = svg.cloneNode(true);
