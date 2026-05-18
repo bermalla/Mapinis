@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Editor de croquis de mapas</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Editor de croquis de mapas</h1>
+      <div class="actions">
+        <button id="undoBtn" type="button">Deshacer</button>
+        <button id="saveJson" type="button">Guardar JSON</button>
+        <button id="copyJson" type="button">Copiar JSON</button>
+        <button id="loadJson" type="button">Cargar JSON</button>
+        <input id="jsonInput" class="file-input" type="file" accept="application/json" />
+        <button id="exportPng" type="button">Exportar PNG</button>
+        <button id="clearMap" class="danger" type="button">Limpiar</button>
+      </div>
+    </header>
+
+    <aside>
+      <div class="section">
+        <h2>Herramientas</h2>
+        <div class="palette" id="palette"></div>
+        <p class="hint">
+          Un clic coloca un bloque 1x1. Si mantenés el clic y arrastrás, se crea un bloque rectangular.
+          Las teclas 1 a 0 seleccionan las primeras 10 herramientas. Podés reordenarlas arrastrando una herramienta sobre otra.
+        </p>
+      </div>
+
+      <div class="section">
+        <h2>Propiedades del seleccionado</h2>
+        <div class="properties">
+          <label>
+            Texto
+            <input id="propText" type="text" placeholder="Texto del bloque" />
+          </label>
+          <label>
+            Tamaño de texto
+            <input id="propTextSize" type="number" min="6" max="72" />
+          </label>
+          <label>
+            Ancho en celdas
+            <input id="propW" type="number" min="1" max="100" />
+          </label>
+          <label>
+            Alto en celdas
+            <input id="propH" type="number" min="1" max="72" />
+          </label>
+          <div class="layer-buttons">
+            <button id="layerDown" type="button">Bajar capa</button>
+            <button id="layerUp" type="button">Subir capa</button>
+          </div>
+        </div>
+        <p class="hint">
+          Doble click en un bloque para enfocar edición de texto. Texto, tamaño, ancho y alto se actualizan en tiempo real.
+          Las manijas permiten redimensionar el bloque seleccionado.
+        </p>
+      </div>
+
+      <div class="section">
+        <h2>Respaldo JSON</h2>
+        <textarea id="jsonBackup" readonly placeholder="Acá aparece el JSON cuando uses Copiar JSON o Guardar JSON."></textarea>
+        <p class="hint">
+          Si el navegador bloquea la descarga, usá Copiar JSON y guardá el texto manualmente en un archivo .json.
+        </p>
+      </div>
+
+      <div class="section">
+        <h2>Controles</h2>
+        <p class="hint">
+          1–0: seleccionar herramienta.<br>
+          Clic: colocar 1x1 o seleccionar bloque existente.<br>
+          Doble click: enfocar edición de texto.<br>
+          Clic + arrastrar en vacío: crear rectángulo.<br>
+          Seleccionar/mover + arrastrar en vacío: desplazar mapa.<br>
+          Arrastrar bloque seleccionado: moverlo.<br>
+          Flechas: mover seleccionado 1 celda.<br>
+          Supr/Backspace: borrar seleccionado.<br>
+          Ctrl+Z: deshacer.<br>
+          Esc: quitar selección.<br>
+          R: rotar texto/flecha.<br>
+          D: duplicar seleccionado.
+        </p>
+      </div>
+    </aside>
+
+    <main id="mapScroller">
+      <div class="canvas-wrap">
+        <svg id="mapSvg" xmlns="http://www.w3.org/2000/svg" tabindex="0"></svg>
+        <div class="zoom-indicator" id="zoomIndicator" style="display:none"></div>
+        <div class="status" id="status">Listo</div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
