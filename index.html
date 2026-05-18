@@ -43,17 +43,16 @@
             Tamaño de texto
             <input id="propTextSize" type="number" min="6" max="72" />
           </label>
-          <label>
-            Ancho en celdas
-            <input id="propW" type="number" min="1" max="100" />
-          </label>
-          <label>
-            Alto en celdas
-            <input id="propH" type="number" min="1" max="72" />
+          <label class="label-row">
+            <span>Notas</span>
+            <input id="propNotes" type="checkbox" />
           </label>
           <div class="layer-buttons">
             <button id="layerDown" type="button">Bajar capa</button>
             <button id="layerUp" type="button">Subir capa</button>
+          </div>
+          <div class="layer-buttons">
+            <button id="toggleShowNotes" type="button">Ocultar notas</button>
           </div>
         </div>
         <p class="hint">

@@ -27,6 +27,7 @@ let items = [];
 let selectedId = null;
 let selectedIds = [];
 let editingId = null;
+let showNotes = true;
 let dragMove = null;
 let createDrag = null;
 let selectionDrag = null;
@@ -48,11 +49,11 @@ const svg = document.getElementById("mapSvg");
 const palette = document.getElementById("palette");
 const status = document.getElementById("status");
 const propText = document.getElementById("propText");
-const propW = document.getElementById("propW");
-const propH = document.getElementById("propH");
 const propTextSize = document.getElementById("propTextSize");
+const propNotes = document.getElementById("propNotes");
 const layerUp = document.getElementById("layerUp");
 const layerDown = document.getElementById("layerDown");
+const toggleShowNotesBtn = document.getElementById("toggleShowNotes");
 const undoBtn = document.getElementById("undoBtn");
 const saveJsonBtn = document.getElementById("saveJson");
 const jsonInput = document.getElementById("jsonInput");
@@ -186,12 +187,13 @@ function resetInteractionState() {
 }
 
 function getDesignBounds() {
-  if (!items || !items.length) return null;
+  const visible = items.filter(isItemVisible);
+  if (!visible || !visible.length) return null;
   let left = Infinity;
   let top = Infinity;
   let right = -Infinity;
   let bottom = -Infinity;
-  items.forEach((item) => {
+  visible.forEach((item) => {
     left = Math.min(left, item.col);
     top = Math.min(top, item.row);
     right = Math.max(right, item.col + item.w - 1);
@@ -224,13 +226,23 @@ function centerMapView() {
 }
 
 function getExportBounds() {
-  const bounds = getDesignBounds();
-  if (!bounds) return null;
+  if (!items || !items.length) return null;
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  items.forEach((item) => {
+    left = Math.min(left, item.col);
+    top = Math.min(top, item.row);
+    right = Math.max(right, item.col + item.w - 1);
+    bottom = Math.max(bottom, item.row + item.h - 1);
+  });
+  if (right === -Infinity) return null;
   return {
-    x: bounds.col * gridSize,
-    y: bounds.row * gridSize,
-    width: bounds.w * gridSize,
-    height: bounds.h * gridSize,
+    x: left * gridSize,
+    y: top * gridSize,
+    width: (right - left + 1) * gridSize,
+    height: (bottom - top + 1) * gridSize,
   };
 }
 
@@ -365,9 +377,13 @@ function createItem(toolId, col, row, w = 1, h = 1) {
 function getItemAtCell(col, row) {
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i];
-    if (col >= item.col && col < item.col + item.w && row >= item.row && row < item.row + item.h) return item;
+    if ((!item.meta || !item.meta.notes || showNotes) && col >= item.col && col < item.col + item.w && row >= item.row && row < item.row + item.h) return item;
   }
   return null;
+}
+
+function isItemVisible(item) {
+  return !(item && item.meta && item.meta.notes) || showNotes;
 }
 
 function deleteSelectedItem() {
@@ -538,7 +554,7 @@ function getCellsForItem(item) {
 function buildPathCellOwners() {
   const owners = new Map();
   items
-    .filter((item) => item.type === "path")
+    .filter((item) => item.type === "path" && isItemVisible(item))
     .forEach((item) => {
       getCellsForItem(item).forEach((cell) => {
         const key = `${cell.col},${cell.row}`;
@@ -704,8 +720,9 @@ function renderItem(item, isPreview = false, pathOwners = buildPathCellOwners())
 }
 
 function renderItems() {
+  const visibleItems = items.filter(isItemVisible);
   const owners = buildPathCellOwners();
-  return items.map((item) => renderItem(item, false, owners)).join("");
+  return visibleItems.map((item) => renderItem(item, false, owners)).join("");
 }
 
 function renderSelectionBox() {
@@ -765,11 +782,10 @@ function render() {
 function updatePropertiesPanel() {
   const selected = selectedIds.length === 1 ? items.find((item) => item.id === selectedId) : null;
   propText.value = selected ? selected.text : "";
-  propW.value = selected ? selected.w : "";
-  propH.value = selected ? selected.h : "";
   propTextSize.value = selected ? Number(selected.textSize) || (selected.type === "note" ? 14 : 18) : "";
+  propNotes.checked = selected ? Boolean(selected.meta && selected.meta.notes) : false;
   const disabled = !selected;
-  [propText, propTextSize, propW, propH, layerUp, layerDown].forEach((element) => {
+  [propText, propTextSize, propNotes, layerUp, layerDown].forEach((element) => {
     element.disabled = disabled;
   });
 }
@@ -978,6 +994,7 @@ window.addEventListener("mouseup", () => {
   if (selectionDrag) {
     const rect = previewRect || rectFromCells(selectionDrag.startCell, selectionDrag.currentCell);
     const selected = items.filter((item) => {
+      if (!isItemVisible(item)) return false;
       const itemRect = {
         left: item.col,
         top: item.row,
@@ -1123,9 +1140,9 @@ function applySelectedProperties(push = true) {
   if (!selected) return;
   if (push) pushUndoState();
   selected.text = propText.value;
+  selected.meta = selected.meta || {};
+  selected.meta.notes = Boolean(propNotes.checked);
   selected.textSize = Math.max(6, Math.min(72, Number(propTextSize.value) || (selected.type === "note" ? 14 : 18)));
-  selected.w = Math.max(1, Math.min(cols, Number(propW.value) || 1));
-  selected.h = Math.max(1, Math.min(rows, Number(propH.value) || 1));
   selected.col = Math.min(cols - selected.w, selected.col);
   selected.row = Math.min(rows - selected.h, selected.row);
   render();
@@ -1138,7 +1155,7 @@ function updateSelectedPropertiesLive() {
   applySelectedProperties(false);
 }
 
-[propText, propTextSize, propW, propH].forEach((input) => {
+[propText, propTextSize].forEach((input) => {
   input.addEventListener("input", updateSelectedPropertiesLive);
   input.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
@@ -1149,6 +1166,40 @@ function updateSelectedPropertiesLive() {
     render();
   });
 });
+
+if (propNotes) {
+  propNotes.addEventListener("change", (event) => {
+    if (!selectedId) return;
+    const selected = items.find((item) => item.id === selectedId);
+    if (!selected) return;
+    pushUndoState();
+    selected.meta = selected.meta || {};
+    selected.meta.notes = Boolean(propNotes.checked);
+    render();
+  });
+}
+
+if (toggleShowNotesBtn) {
+  const updateToggleText = () => {
+    toggleShowNotesBtn.textContent = showNotes ? "Ocultar notas" : "Mostrar notas";
+  };
+  updateToggleText();
+  toggleShowNotesBtn.addEventListener("click", (event) => {
+    event.preventDefault();
+    showNotes = !showNotes;
+    // remove hidden items from selection
+    selectedIds = selectedIds.filter((id) => {
+      const it = items.find((candidate) => candidate.id === id);
+      return isItemVisible(it);
+    });
+    selectedId = selectedIds[0] || null;
+    if (selectedId) editingId = editingId === selectedId ? editingId : null;
+    else editingId = null;
+    updateToggleText();
+    render();
+    showStatus(showNotes ? "Notas mostradas" : "Notas ocultas");
+  });
+}
 
 function moveSelectedLayer(direction) {
   if (!selectedId) {
@@ -1300,21 +1351,84 @@ document.getElementById("exportPng").addEventListener("click", async (event) => 
   await exportMapAsPng();
 });
 
+function buildExportLegendSvg(width, height) {
+  const legendTools = tools.filter((tool) => !["select", "start", "note"].includes(tool.id));
+  const padding = 16;
+  const itemHeight = 26;
+  const swatchSize = 16;
+  const labelX = padding + swatchSize + 10;
+  const visibleHeight = legendTools.length * itemHeight;
+  const titleHeight = 20;
+  const topOffset = padding + titleHeight + 8;
+
+  const legendLines = legendTools
+    .map((tool, index) => {
+      const y = topOffset + index * itemHeight;
+      const fill = tool.fill || "#ffffff";
+      const stroke = tool.stroke || "#222222";
+      return `
+        <g transform="translate(${padding}, ${y})">
+          <rect x="0" y="0" width="${swatchSize}" height="${swatchSize}" fill="${fill}" stroke="${stroke}" stroke-width="1.5" />
+          <text x="${labelX}" y="${swatchSize - 2}" font-family="Arial, sans-serif" font-size="14" fill="#222222">${escapeXml(tool.label)}</text>
+        </g>
+      `;
+    })
+    .join("");
+
+  const title = `<text x="${padding}" y="${padding + 14}" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#222222">Leyenda</text>`;
+
+  return `
+    <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff" />
+    ${title}
+    ${legendLines}
+  `;
+}
+
 async function exportMapAsPng() {
   try {
+    const exportBounds = getExportBounds();
+    const paddingCells = 1; // add one cell padding around content
+    let contentWidth, contentHeight, viewBoxX, viewBoxY;
+    if (exportBounds) {
+      const padPx = paddingCells * gridSize;
+      viewBoxX = Math.max(0, exportBounds.x - padPx);
+      viewBoxY = Math.max(0, exportBounds.y - padPx);
+      const maxX = Math.min(canvasWidth, exportBounds.x + exportBounds.width + padPx);
+      const maxY = Math.min(canvasHeight, exportBounds.y + exportBounds.height + padPx);
+      contentWidth = Math.max(1, maxX - viewBoxX);
+      contentHeight = Math.max(1, maxY - viewBoxY);
+    } else {
+      viewBoxX = 0;
+      viewBoxY = 0;
+      contentWidth = canvasWidth;
+      contentHeight = canvasHeight;
+    }
+    const legendWidth = 260;
+    const exportWidth = contentWidth + legendWidth;
+    const exportHeight = contentHeight;
+
+    const exportSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    exportSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    exportSvg.setAttribute("width", String(exportWidth));
+    exportSvg.setAttribute("height", String(exportHeight));
+    exportSvg.setAttribute("viewBox", `0 0 ${exportWidth} ${exportHeight}`);
+
+    const legendGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    legendGroup.innerHTML = buildExportLegendSvg(legendWidth, exportHeight);
+    exportSvg.appendChild(legendGroup);
+
     const cloneSvg = svg.cloneNode(true);
     cloneSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-    const exportBounds = getExportBounds();
-    const exportWidth = exportBounds ? exportBounds.width : canvasWidth;
-    const exportHeight = exportBounds ? exportBounds.height : canvasHeight;
-    const viewBoxX = exportBounds ? exportBounds.x : 0;
-    const viewBoxY = exportBounds ? exportBounds.y : 0;
-    cloneSvg.setAttribute("width", String(exportWidth));
-    cloneSvg.setAttribute("height", String(exportHeight));
-    cloneSvg.setAttribute("viewBox", `${viewBoxX} ${viewBoxY} ${exportWidth} ${exportHeight}`);
+    cloneSvg.setAttribute("viewBox", `${viewBoxX} ${viewBoxY} ${contentWidth} ${contentHeight}`);
+    cloneSvg.setAttribute("x", String(legendWidth));
+    cloneSvg.setAttribute("y", "0");
+    cloneSvg.setAttribute("width", String(contentWidth));
+    cloneSvg.setAttribute("height", String(contentHeight));
     cloneSvg.querySelectorAll("#grid line").forEach((line) => line.setAttribute("stroke", "#dddddd"));
 
-    const source = new XMLSerializer().serializeToString(cloneSvg);
+    exportSvg.appendChild(cloneSvg);
+
+    const source = new XMLSerializer().serializeToString(exportSvg);
     const url = URL.createObjectURL(new Blob([source], { type: "image/svg+xml;charset=utf-8" }));
     const img = new Image();
 
@@ -1323,7 +1437,7 @@ async function exportMapAsPng() {
       canvas.width = exportWidth;
       canvas.height = exportHeight;
       const ctx = canvas.getContext("2d");
-      ctx.fillStyle = "#e6e6e6";
+      ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, exportWidth, exportHeight);
       ctx.drawImage(img, 0, 0, exportWidth, exportHeight);
       URL.revokeObjectURL(url);
