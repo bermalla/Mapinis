@@ -66,7 +66,9 @@ const toolEditorLabel = document.getElementById("toolEditorLabel");
 const toolEditorText = document.getElementById("toolEditorText");
 const toolEditorPaletteText = document.getElementById("toolEditorPaletteText");
 const toolEditorFill = document.getElementById("toolEditorFill");
+const toolEditorFillTransparent = document.getElementById("toolEditorFillTransparent");
 const toolEditorStroke = document.getElementById("toolEditorStroke");
+const toolEditorStrokeTransparent = document.getElementById("toolEditorStrokeTransparent");
 const toolEditorTextColor = document.getElementById("toolEditorTextColor");
 const toolEditorCancel = document.getElementById("toolEditorCancel");
 let toolBeingEdited = null;
@@ -501,9 +503,13 @@ function openToolEditor(tool) {
   toolEditorOriginalFill = tool.fill;
   toolEditorOriginalStroke = tool.stroke;
   toolEditorOriginalTextColor = tool.textColor;
+  toolEditorFillTransparent.checked = tool.fill === "transparent";
+  toolEditorStrokeTransparent.checked = tool.stroke === "transparent";
   toolEditorFill.value = /^#([0-9A-Fa-f]{3}){1,2}$/.test(tool.fill) ? tool.fill : "#ffffff";
   toolEditorStroke.value = /^#([0-9A-Fa-f]{3}){1,2}$/.test(tool.stroke) ? tool.stroke : "#222222";
   toolEditorTextColor.value = /^#([0-9A-Fa-f]{3}){1,2}$/.test(tool.textColor) ? tool.textColor : "#1f4fa3";
+  toolEditorFill.disabled = toolEditorFillTransparent.checked;
+  toolEditorStroke.disabled = toolEditorStrokeTransparent.checked;
   toolEditorFill.dataset.touched = "false";
   toolEditorStroke.dataset.touched = "false";
   toolEditorTextColor.dataset.touched = "false";
@@ -519,8 +525,8 @@ function closeToolEditor() {
 function updateToolEditorPreview() {
   const preview = document.getElementById("toolEditorPreview");
   if (!preview || !toolBeingEdited) return;
-  const fill = toolEditorFill.value || "#ffffff";
-  const stroke = toolEditorStroke.value || "#222222";
+  const fill = toolEditorFillTransparent.checked ? "transparent" : toolEditorFill.value || "#ffffff";
+  const stroke = toolEditorStrokeTransparent.checked ? "transparent" : toolEditorStroke.value || "#222222";
   const textColor = toolEditorTextColor.value || "#1f4fa3";
   const text = String(toolEditorText.value || toolBeingEdited.text || "").trim() || String(toolEditorPaletteText.value || toolBeingEdited.paletteText || toolBeingEdited.text || "");
   preview.innerHTML = `<div class="preview-swatch" style="background:${fill};border:2px solid ${stroke};color:${textColor};">${text}</div>`;
@@ -535,12 +541,16 @@ function applyToolEditorChanges() {
   toolBeingEdited.text = String(toolEditorText.value || "");
   const paletteTextValue = String(toolEditorPaletteText.value || "").trim();
   toolBeingEdited.paletteText = paletteTextValue || undefined;
-  if (toolEditorFill.dataset.touched === "true" || /^#([0-9A-Fa-f]{3}){1,2}$/.test(toolEditorOriginalFill)) {
+  if (toolEditorFillTransparent.checked) {
+    toolBeingEdited.fill = "transparent";
+  } else if (toolEditorFill.dataset.touched === "true" || /^#([0-9A-Fa-f]{3}){1,2}$/.test(toolEditorOriginalFill)) {
     toolBeingEdited.fill = toolEditorFill.value || toolBeingEdited.fill;
   } else {
     toolBeingEdited.fill = toolEditorOriginalFill;
   }
-  if (toolEditorStroke.dataset.touched === "true" || /^#([0-9A-Fa-f]{3}){1,2}$/.test(toolEditorOriginalStroke)) {
+  if (toolEditorStrokeTransparent.checked) {
+    toolBeingEdited.stroke = "transparent";
+  } else if (toolEditorStroke.dataset.touched === "true" || /^#([0-9A-Fa-f]{3}){1,2}$/.test(toolEditorOriginalStroke)) {
     toolBeingEdited.stroke = toolEditorStroke.value || toolBeingEdited.stroke;
   } else {
     toolBeingEdited.stroke = toolEditorOriginalStroke;
@@ -1498,8 +1508,18 @@ toolEditorFill.addEventListener("input", () => {
   updateToolEditorPreview();
 });
 
+toolEditorFillTransparent.addEventListener("change", () => {
+  toolEditorFill.disabled = toolEditorFillTransparent.checked;
+  updateToolEditorPreview();
+});
+
 toolEditorStroke.addEventListener("input", () => {
   toolEditorStroke.dataset.touched = "true";
+  updateToolEditorPreview();
+});
+
+toolEditorStrokeTransparent.addEventListener("change", () => {
+  toolEditorStroke.disabled = toolEditorStrokeTransparent.checked;
   updateToolEditorPreview();
 });
 
@@ -1513,10 +1533,6 @@ toolEditorText.addEventListener("input", updateToolEditorPreview);
 toolEditorPaletteText.addEventListener("input", updateToolEditorPreview);
 
 toolEditorLabel.addEventListener("input", updateToolEditorPreview);
-
-toolEditorStroke.addEventListener("input", () => {
-  toolEditorStroke.dataset.touched = "true";
-});
 
 document.getElementById("exportPng").addEventListener("click", async (event) => {
   event.preventDefault();

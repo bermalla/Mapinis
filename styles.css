@@ -122,6 +122,9 @@ aside {
   place-items: center;
   font-weight: bold;
   font-size: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .swatch.path { background: #ffffff; }
@@ -297,6 +300,9 @@ svg {
   text-align: center;
   line-height: 1;
   padding: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .modal-content input[type="text"],
@@ -306,6 +312,34 @@ svg {
   border-radius: 8px;
   padding: 8px;
   font: inherit;
+}
+
+.color-transparent-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  width: 100%;
+}
+
+.color-transparent-row span {
+  order: 1;
+  flex: 1;
+  text-align: left;
+}
+
+.color-transparent-row input {
+  order: 2;
+}
+
+.label-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
 }
 
 .modal-actions {
