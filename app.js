@@ -39,6 +39,7 @@ let zoomLevel = 1;
 const minZoom = 0.1;
 const maxZoom = 2;
 const zoomStep = 0.05;
+let centerViewPending = true;
 let undoStack = [];
 let hasUnsavedChanges = false;
 let saveButtonTimer = null;
@@ -182,6 +183,55 @@ function resetInteractionState() {
   resizeDrag = null;
   previewRect = null;
   mouseDownState = null;
+}
+
+function getDesignBounds() {
+  if (!items || !items.length) return null;
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  items.forEach((item) => {
+    left = Math.min(left, item.col);
+    top = Math.min(top, item.row);
+    right = Math.max(right, item.col + item.w - 1);
+    bottom = Math.max(bottom, item.row + item.h - 1);
+  });
+  return {
+    col: left,
+    row: top,
+    w: right - left + 1,
+    h: bottom - top + 1,
+  };
+}
+
+function centerMapView() {
+  const containerRect = mapScroller.getBoundingClientRect();
+  const bounds = getDesignBounds();
+  const contentWidth = canvasWidth * zoomLevel;
+  const contentHeight = canvasHeight * zoomLevel;
+  let centerX = contentWidth / 2;
+  let centerY = contentHeight / 2;
+  if (bounds) {
+    const designX = (bounds.col + bounds.w / 2) * gridSize * zoomLevel;
+    const designY = (bounds.row + bounds.h / 2) * gridSize * zoomLevel;
+    centerX = Math.min(Math.max(designX, containerRect.width / 2), contentWidth - containerRect.width / 2);
+    centerY = Math.min(Math.max(designY, containerRect.height / 2), contentHeight - containerRect.height / 2);
+  }
+  mapScroller.scrollLeft = Math.max(0, centerX - containerRect.width / 2);
+  mapScroller.scrollTop = Math.max(0, centerY - containerRect.height / 2);
+  centerViewPending = false;
+}
+
+function getExportBounds() {
+  const bounds = getDesignBounds();
+  if (!bounds) return null;
+  return {
+    x: bounds.col * gridSize,
+    y: bounds.row * gridSize,
+    width: bounds.w * gridSize,
+    height: bounds.h * gridSize,
+  };
 }
 
 function applyZoom(newZoom, pointerX, pointerY) {
@@ -709,6 +759,7 @@ function render() {
     : `Herramienta: ${getToolOrFallback(activeTool).label}`;
   showStatus(statusMessage);
   updateZoomIndicator();
+  if (centerViewPending) centerMapView();
 }
 
 function updatePropertiesPanel() {
@@ -744,10 +795,19 @@ svg.addEventListener("mousedown", (event) => {
     const now = Date.now();
     const isDoubleClick = lastMouseDown.id === clickedItem.id && now - lastMouseDown.time < 350;
     const clickedIsSelected = selectedIds.includes(clickedItem.id);
+    const additiveSelection = event.shiftKey && activeTool === "select";
     lastMouseDown = { id: clickedItem.id, time: now };
     activeTool = "select";
     selectedId = clickedItem.id;
-    if (!clickedIsSelected || selectedIds.length <= 1) {
+    if (additiveSelection) {
+      if (clickedIsSelected) {
+        selectedIds = selectedIds.filter((id) => id !== clickedItem.id);
+      } else {
+        selectedIds = [...selectedIds, clickedItem.id];
+      }
+    } else if (clickedIsSelected) {
+      selectedIds = selectedIds.slice();
+    } else {
       selectedIds = [clickedItem.id];
     }
     const isSameEditingItem = editingId === clickedItem.id;
@@ -788,13 +848,15 @@ svg.addEventListener("mousedown", (event) => {
   lastMouseDown = { id: null, time: 0 };
   if (activeTool === "select") {
     selectedId = null;
-    selectedIds = [];
-    editingId = null;
+    if (!event.shiftKey) {
+      selectedIds = [];
+      editingId = null;
+    }
     dragMove = null;
     createDrag = null;
     resizeDrag = null;
     previewRect = null;
-    selectionDrag = { startCell: cell, currentCell: cell };
+    selectionDrag = { startCell: cell, currentCell: cell, additive: event.shiftKey };
     previewRect = rectFromCells(cell, cell);
     render();
     return;
@@ -935,7 +997,12 @@ window.addEventListener("mouseup", () => {
         itemRect.bottom >= selectionRect.top
       );
     });
-    selectedIds = selected.map((item) => item.id);
+    const selectedIdsFromDrag = selected.map((item) => item.id);
+    if (selectionDrag.additive) {
+      selectedIds = Array.from(new Set([...selectedIds, ...selectedIdsFromDrag]));
+    } else {
+      selectedIds = selectedIdsFromDrag;
+    }
     selectedId = selectedIds[0] || null;
     editingId = null;
     selectionDrag = null;
@@ -1124,6 +1191,7 @@ document.getElementById("clearMap").addEventListener("click", (event) => {
   pushUndoState();
   items = [];
   resetInteractionState();
+  centerViewPending = true;
   render();
   showStatus("Mapa limpiado");
 });
@@ -1200,6 +1268,7 @@ function loadJsonFromText(text) {
       };
     });
     resetInteractionState();
+    centerViewPending = true;
     render();
     markSaved();
     showStatus("JSON cargado correctamente");
@@ -1235,9 +1304,14 @@ async function exportMapAsPng() {
   try {
     const cloneSvg = svg.cloneNode(true);
     cloneSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-    cloneSvg.setAttribute("width", String(canvasWidth));
-    cloneSvg.setAttribute("height", String(canvasHeight));
-    cloneSvg.setAttribute("viewBox", `0 0 ${canvasWidth} ${canvasHeight}`);
+    const exportBounds = getExportBounds();
+    const exportWidth = exportBounds ? exportBounds.width : canvasWidth;
+    const exportHeight = exportBounds ? exportBounds.height : canvasHeight;
+    const viewBoxX = exportBounds ? exportBounds.x : 0;
+    const viewBoxY = exportBounds ? exportBounds.y : 0;
+    cloneSvg.setAttribute("width", String(exportWidth));
+    cloneSvg.setAttribute("height", String(exportHeight));
+    cloneSvg.setAttribute("viewBox", `${viewBoxX} ${viewBoxY} ${exportWidth} ${exportHeight}`);
     cloneSvg.querySelectorAll("#grid line").forEach((line) => line.setAttribute("stroke", "#dddddd"));
 
     const source = new XMLSerializer().serializeToString(cloneSvg);
@@ -1246,12 +1320,12 @@ async function exportMapAsPng() {
 
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      canvas.width = canvasWidth;
-      canvas.height = canvasHeight;
+      canvas.width = exportWidth;
+      canvas.height = exportHeight;
       const ctx = canvas.getContext("2d");
       ctx.fillStyle = "#e6e6e6";
-      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-      ctx.drawImage(img, 0, 0, canvasWidth, canvasHeight);
+      ctx.fillRect(0, 0, exportWidth, exportHeight);
+      ctx.drawImage(img, 0, 0, exportWidth, exportHeight);
       URL.revokeObjectURL(url);
       canvas.toBlob((blob) => {
         if (!blob) {
