@@ -71,6 +71,8 @@ const toolEditorStroke = document.getElementById("toolEditorStroke");
 const toolEditorStrokeTransparent = document.getElementById("toolEditorStrokeTransparent");
 const toolEditorTextColor = document.getElementById("toolEditorTextColor");
 const toolEditorCancel = document.getElementById("toolEditorCancel");
+const addToolButton = document.getElementById("addToolButton");
+const toolEditorDelete = document.getElementById("toolEditorDelete");
 let toolBeingEdited = null;
 let toolEditorOriginalFill = null;
 let toolEditorOriginalStroke = null;
@@ -513,9 +515,52 @@ function openToolEditor(tool) {
   toolEditorFill.dataset.touched = "false";
   toolEditorStroke.dataset.touched = "false";
   toolEditorTextColor.dataset.touched = "false";
+  toolEditorDelete.disabled = tool.id === "select" || tool.id === "note";
   toolEditorModal.hidden = false;
   updateToolEditorPreview();
 }
+
+function createNewTool() {
+  pushUndoState();
+  const newToolId = `block-${Date.now()}`;
+  const newTool = {
+    id: newToolId,
+    label: "Nuevo bloque",
+    fill: "#ffffff",
+    stroke: "#222222",
+    text: "",
+    textColor: "#1f4fa3",
+    className: "path",
+  };
+  tools.push(newTool);
+  rebuildToolMap();
+  activeTool = newTool.id;
+  render();
+  openToolEditor(newTool);
+}
+
+function deleteToolBeingEdited() {
+  if (!toolBeingEdited) return;
+  if (toolBeingEdited.id === "select" || toolBeingEdited.id === "note") {
+    showStatus("Esta herramienta no puede eliminarse");
+    return;
+  }
+  const confirmed = confirm("¿Eliminar este bloque? Se eliminarán también los bloques existentes de este tipo.");
+  if (!confirmed) return;
+  pushUndoState();
+
+  items = items.filter((item) => item.type !== toolBeingEdited.id);
+  tools = tools.filter((tool) => tool.id !== toolBeingEdited.id);
+  rebuildToolMap();
+  if (activeTool === toolBeingEdited.id) {
+    activeTool = "select";
+  }
+  closeToolEditor();
+  resetInteractionState();
+  render();
+  showStatus("Herramienta eliminada");
+}
+
 
 function closeToolEditor() {
   toolEditorModal.hidden = true;
@@ -1496,12 +1541,25 @@ toolEditorCancel.addEventListener("click", (event) => {
   focusEditor();
 });
 
+toolEditorDelete.addEventListener("click", (event) => {
+  event.preventDefault();
+  deleteToolBeingEdited();
+});
+
 toolEditorModal.addEventListener("click", (event) => {
   if (event.target === toolEditorModal) {
     closeToolEditor();
     focusEditor();
   }
 });
+
+if (addToolButton) {
+  addToolButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    createNewTool();
+  });
+}
+
 
 toolEditorFill.addEventListener("input", () => {
   toolEditorFill.dataset.touched = "true";

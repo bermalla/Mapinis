@@ -104,6 +104,20 @@ aside {
   padding: 7px;
 }
 
+.palette-add-button {
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 12px;
+  background: #2d6cdf;
+  color: white;
+  border-color: #2d6cdf;
+  border-radius: 8px;
+}
+
+.palette-add-button:hover {
+  filter: brightness(0.95);
+}
+
 .palette button.active { outline: 3px solid var(--selected); }
 .palette button.dragging { opacity: 0.45; }
 .palette button.drop-target { outline: 2px dashed #2d6cdf; }
