@@ -60,6 +60,8 @@ const jsonInput = document.getElementById("jsonInput");
 const jsonBackup = document.getElementById("jsonBackup");
 const mapScroller = document.getElementById("mapScroller");
 const zoomIndicator = document.getElementById("zoomIndicator");
+const currentFileNameNode = document.getElementById("currentFileName");
+let currentFilename = null;
 const toolEditorModal = document.getElementById("toolEditorModal");
 const toolEditorForm = document.getElementById("toolEditorForm");
 const toolEditorLabel = document.getElementById("toolEditorLabel");
@@ -354,6 +356,16 @@ function buildSaveData() {
 
 function buildSaveJson() {
   return JSON.stringify(buildSaveData(), null, 2);
+}
+
+function updateCurrentFilenameDisplay() {
+  if (!currentFileNameNode) return;
+  currentFileNameNode.textContent = currentFilename ? `(${currentFilename})` : "";
+}
+
+function setCurrentFilename(filename) {
+  currentFilename = filename ? String(filename) : null;
+  updateCurrentFilenameDisplay();
 }
 
 function getMousePoint(event) {
@@ -1408,7 +1420,8 @@ saveJsonBtn.addEventListener("click", async (event) => {
   focusEditor();
   const json = buildSaveJson();
   jsonBackup.value = json;
-  await saveTextFile("mapa-croquis.json", json, "application/json;charset=utf-8");
+  const savedName = await saveTextFile("mapa-croquis.json", json, "application/json;charset=utf-8");
+  if (savedName) setCurrentFilename(savedName);
 });
 
 document.getElementById("copyJson").addEventListener("click", async (event) => {
@@ -1437,7 +1450,7 @@ document.getElementById("loadJson").addEventListener("click", (event) => {
   jsonInput.click();
 });
 
-function loadJsonFromText(text) {
+function loadJsonFromText(text, filename) {
   try {
     const data = JSON.parse(String(text));
     if (!data || !Array.isArray(data.items)) throw new Error("Formato inválido");
@@ -1503,6 +1516,7 @@ function loadJsonFromText(text) {
     centerViewPending = true;
     render();
     markSaved();
+    if (filename) setCurrentFilename(filename);
     showStatus("JSON cargado correctamente");
   } catch (error) {
     console.error(error);
@@ -1518,7 +1532,7 @@ jsonInput.addEventListener("change", (event) => {
     return;
   }
   const reader = new FileReader();
-  reader.onload = () => loadJsonFromText(reader.result);
+  reader.onload = () => loadJsonFromText(reader.result, file.name);
   reader.onerror = () => {
     alert("No se pudo leer el archivo JSON.");
     showStatus("Error de lectura del archivo");
@@ -1748,24 +1762,32 @@ async function saveTextFile(filename, content, type) {
       await writable.close();
       markSaved();
       showStatus("JSON guardado correctamente");
-      return;
+      return handle.name || filename;
     }
     const ok = downloadFileFallback(filename, content, type);
     if (ok) {
       markSaved();
       showStatus("JSON generado como descarga");
-    } else showStatus("Descarga bloqueada: usá Copiar JSON");
+      return filename;
+    } else {
+      showStatus("Descarga bloqueada: usá Copiar JSON");
+      return null;
+    }
   } catch (error) {
     if (error && error.name === "AbortError") {
       showStatus("Guardado cancelado");
-      return;
+      return null;
     }
     console.error(error);
     const ok = downloadFileFallback(filename, content, type);
     if (ok) {
       markSaved();
       showStatus("JSON generado con descarga alternativa");
-    } else showStatus("No se pudo guardar. Probá con Copiar JSON.");
+      return filename;
+    } else {
+      showStatus("No se pudo guardar. Probá con Copiar JSON.");
+      return null;
+    }
   }
 }
 
