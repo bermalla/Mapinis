@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Editor de croquis de mapas</title>
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://unpkg.com/three@0.152.2/build/three.min.js" defer></script>
   <script src="app.js" defer></script>
+  <script src="viewer.js" defer></script>
 </head>
 <body>
   <div class="app">
@@ -13,6 +15,7 @@
       <h1>Mapinis <span id="currentFileName"></span></h1>
       <div class="actions">
         <button id="undoBtn" type="button">Deshacer</button>
+        <button id="open3D" type="button">Ver 3D</button>
         <button id="saveJson" type="button">Guardar JSON</button>
         <button id="copyJson" type="button">Copiar JSON</button>
         <button id="loadJson" type="button">Cargar JSON</button>
@@ -145,6 +148,14 @@
         </div>
       </form>
     </div>
+  </div>
+  
+  <div id="viewerModal" class="viewer-modal" hidden>
+    <div class="viewer-topbar">
+      <button id="close3D" type="button">Cerrar 3D</button>
+      <div class="viewer-hint">Click en la vista para controlar con el mouse. WASD para moverte. Esc para salir.</div>
+    </div>
+    <div id="viewerContainer" class="viewer-container"></div>
   </div>
 </body>
 </html>

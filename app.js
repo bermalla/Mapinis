@@ -16,6 +16,7 @@ const toolDefinitions = [
   { id: "obstacle", label: "Obstáculo", fill: "#444444", stroke: "#222222", text: "", className: "obstacle", textColor: "#ffffff" },
   { id: "mini", label: "Mini sala vacía", fill: "#ffc0c0", stroke: "#ff3d3d", text: "", className: "mini", textColor: "#1f4fa3" },
   { id: "start", label: "Inicio/Fin", fill: "#fff4b8", stroke: "#222222", text: "", className: "start", textColor: "#1f4fa3" },
+  { id: "pov3d", label: "POV 3D", fill: "#d8f3ff", stroke: "#0b6ea8", text: "3D", className: "pov3d", textColor: "#0b3554", fixedSize: true, unique: true },
   { id: "statusBlock", label: "Status", fill: "#ffd84d", stroke: "#222222", text: "", className: "statusBlock", textColor: "#1f4fa3" },
   { id: "note", label: "Texto libre", fill: "transparent", stroke: "transparent", text: "texto", paletteText: "", className: "text", textColor: "#222222" },
 ];
@@ -85,7 +86,16 @@ function uid() {
 }
 
 function rebuildToolMap() {
+  enforceToolRules();
   toolMap = new Map(tools.map((tool) => [tool.id, tool]));
+}
+
+function enforceToolRules() {
+  const povTool = tools.find((tool) => tool.id === "pov3d");
+  if (povTool) {
+    povTool.fixedSize = true;
+    povTool.unique = true;
+  }
 }
 
 function getTool(id) {
@@ -94,6 +104,15 @@ function getTool(id) {
 
 function getToolOrFallback(id) {
   return getTool(id) || getTool("path") || tools[0];
+}
+
+function isProtectedTool(toolId) {
+  return ["select", "note", "pov3d"].includes(toolId);
+}
+
+function isFixedSizeTool(toolId) {
+  const tool = getTool(toolId);
+  return Boolean(tool && tool.fixedSize);
 }
 
 function registerLoadedTool(tool) {
@@ -107,6 +126,8 @@ function registerLoadedTool(tool) {
     textColor: typeof tool.textColor === "string" ? tool.textColor : "#1f4fa3",
     className: tool.className || "text",
     paletteText: typeof tool.paletteText === "string" ? tool.paletteText : undefined,
+    fixedSize: Boolean(tool.fixedSize),
+    unique: Boolean(tool.unique),
   });
   rebuildToolMap();
 }
@@ -333,6 +354,8 @@ function buildSaveData() {
         };
         if (tool.paletteText) data.paletteText = tool.paletteText;
         if (typeof tool.textColor === "string" && tool.textColor.length > 0) data.textColor = tool.textColor;
+        if (tool.fixedSize) data.fixedSize = true;
+        if (tool.unique) data.unique = true;
         return data;
       }),
     items: items.map((item) => {
@@ -357,6 +380,17 @@ function buildSaveData() {
 function buildSaveJson() {
   return JSON.stringify(buildSaveData(), null, 2);
 }
+
+window.MapinisEditor = {
+  getSnapshot() {
+    return {
+      grid: { cols, rows, gridSize },
+      items: cloneState(items),
+      tools: cloneState(tools),
+      showNotes,
+    };
+  },
+};
 
 function updateCurrentFilenameDisplay() {
   if (!currentFileNameNode) return;
@@ -395,13 +429,15 @@ function rectFromCells(a, b) {
 
 function createItem(toolId, col, row, w = 1, h = 1) {
   const tool = getToolOrFallback(toolId);
+  const itemWidth = tool.fixedSize ? 1 : w;
+  const itemHeight = tool.fixedSize ? 1 : h;
   return {
     id: uid(),
     type: tool.id,
     col,
     row,
-    w,
-    h,
+    w: itemWidth,
+    h: itemHeight,
     fill: tool.fill,
     stroke: tool.stroke,
     text: tool.text || "",
@@ -410,6 +446,48 @@ function createItem(toolId, col, row, w = 1, h = 1) {
     textColor: tool.textColor || "#1f4fa3",
     meta: {},
   };
+}
+
+function normalizeUniqueFixedItems() {
+  const seen = new Set();
+  items = items.filter((item) => {
+    const tool = getTool(item.type);
+    if (!tool) return true;
+    if (tool.fixedSize) {
+      item.w = 1;
+      item.h = 1;
+      item.col = Math.max(0, Math.min(cols - 1, item.col));
+      item.row = Math.max(0, Math.min(rows - 1, item.row));
+    }
+    if (!tool.unique) return true;
+    if (seen.has(item.type)) return false;
+    seen.add(item.type);
+    return true;
+  });
+}
+
+function placeOrMoveUniqueItem(toolId, col, row) {
+  const tool = getToolOrFallback(toolId);
+  const existing = tool.unique ? items.find((item) => item.type === tool.id) : null;
+  if (existing) {
+    existing.col = Math.max(0, Math.min(cols - 1, col));
+    existing.row = Math.max(0, Math.min(rows - 1, row));
+    existing.w = 1;
+    existing.h = 1;
+    existing.fill = tool.fill;
+    existing.stroke = tool.stroke;
+    existing.textColor = tool.textColor || existing.textColor;
+    selectedId = existing.id;
+    selectedIds = [existing.id];
+    showStatus(`${tool.label} movido`);
+    return existing;
+  }
+  const item = createItem(tool.id, col, row, 1, 1);
+  items.push(item);
+  selectedId = item.id;
+  selectedIds = [item.id];
+  showStatus(`${tool.label} colocado`);
+  return item;
 }
 
 function getItemAtCell(col, row) {
@@ -527,7 +605,7 @@ function openToolEditor(tool) {
   toolEditorFill.dataset.touched = "false";
   toolEditorStroke.dataset.touched = "false";
   toolEditorTextColor.dataset.touched = "false";
-  toolEditorDelete.disabled = tool.id === "select" || tool.id === "note";
+  toolEditorDelete.disabled = isProtectedTool(tool.id);
   toolEditorModal.hidden = false;
   updateToolEditorPreview();
 }
@@ -553,7 +631,7 @@ function createNewTool() {
 
 function deleteToolBeingEdited() {
   if (!toolBeingEdited) return;
-  if (toolBeingEdited.id === "select" || toolBeingEdited.id === "note") {
+  if (isProtectedTool(toolBeingEdited.id)) {
     showStatus("Esta herramienta no puede eliminarse");
     return;
   }
@@ -771,6 +849,7 @@ function renderResizeHandles(item) {
 }
 
 function getResizeEdgeForItem(point, item) {
+  if (isFixedSizeTool(item.type)) return null;
   const x = item.col * gridSize;
   const y = item.row * gridSize;
   const w = item.w * gridSize;
@@ -848,7 +927,7 @@ function renderPathItem(item, isPreview, pathOwners) {
   const textSize = Number(item.textSize) || 18;
   const textColor = item.textColor || "#1f4fa3";
   const textMarkup = item.text ? renderWrappedText(item, x, y, w, h, centerX, centerY, textSize, textColor) : "";
-  const selectionMarkup = isSelected && !isPreview ? `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#ff9f1c" stroke-width="3" />${isEditing ? renderResizeHandles(item) : ""}` : "";
+  const selectionMarkup = isSelected && !isPreview ? `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#ff9f1c" stroke-width="3" />${isEditing && !isFixedSizeTool(item.type) ? renderResizeHandles(item) : ""}` : "";
 
   return `
     <g class="item" data-id="${item.id || "preview"}" opacity="${opacity}" style="cursor:move;">
@@ -882,7 +961,7 @@ function renderItem(item, isPreview = false, pathOwners = buildPathCellOwners())
     <g class="item" data-id="${item.id || "preview"}" opacity="${opacity}" style="cursor:move;">
       <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${item.fill}" stroke="${stroke}" stroke-width="${strokeWidth}" />
       ${textMarkup}
-      ${isSelected && isEditing && !isPreview ? renderResizeHandles(item) : ""}
+      ${isSelected && isEditing && !isPreview && !isFixedSizeTool(item.type) ? renderResizeHandles(item) : ""}
     </g>
   `;
 }
@@ -917,6 +996,7 @@ function renderPreview() {
     text: tool.text || "",
     rotation: 0,
     textSize: tool.textSize || (tool.id === "note" ? 14 : 18),
+    textColor: tool.textColor || "#1f4fa3",
   }, true);
 }
 
@@ -973,6 +1053,20 @@ svg.addEventListener("mousedown", (event) => {
   event.preventDefault();
   focusEditor();
   const cell = getMouseCell(event);
+
+  if (activeTool !== "select" && getTool(activeTool)?.unique) {
+    selectedId = null;
+    selectedIds = [];
+    editingId = null;
+    dragMove = null;
+    resizeDrag = null;
+    panDrag = null;
+    createDrag = { toolId: activeTool, startCell: cell, currentCell: cell };
+    previewRect = rectFromCells(cell, cell);
+    render();
+    return;
+  }
+
   const clickedItem = getItemAtCell(cell.col, cell.row);
 
   if (clickedItem) {
@@ -1140,23 +1234,30 @@ window.addEventListener("mousemove", (event) => {
   if (createDrag) {
     const cell = getMouseCell(event);
     createDrag.currentCell = cell;
-    previewRect = rectFromCells(createDrag.startCell, cell);
+    previewRect = isFixedSizeTool(createDrag.toolId) ? rectFromCells(cell, cell) : rectFromCells(createDrag.startCell, cell);
     render();
   }
 });
 
 window.addEventListener("mouseup", () => {
   if (createDrag) {
+    const tool = getToolOrFallback(createDrag.toolId);
     const rect = previewRect || rectFromCells(createDrag.startCell, createDrag.currentCell);
-    const item = createItem(createDrag.toolId, rect.col, rect.row, rect.w, rect.h);
+    const hadUniqueItem = tool.unique && items.some((existing) => existing.type === tool.id);
     pushUndoState();
-    items.push(item);
-    selectedId = null;
-    selectedIds = [];
+    const item = tool.unique
+      ? placeOrMoveUniqueItem(tool.id, rect.col, rect.row)
+      : createItem(tool.id, rect.col, rect.row, rect.w, rect.h);
+    if (!tool.unique) {
+      items.push(item);
+      selectedId = null;
+      selectedIds = [];
+    }
     editingId = null;
     createDrag = null;
     previewRect = null;
     render();
+    if (tool.unique) showStatus(hadUniqueItem ? `${tool.label} movido` : `${tool.label} colocado`);
   }
 
   if (selectionDrag) {
@@ -1283,6 +1384,10 @@ document.addEventListener("keydown", (event) => {
 
   if (event.key.toLowerCase() === "d") {
     event.preventDefault();
+    if (getTool(selected.type)?.unique) {
+      showStatus("Esta herramienta solo puede existir una vez");
+      return;
+    }
     pushUndoState();
     const duplicate = {
       ...selected,
@@ -1420,7 +1525,9 @@ saveJsonBtn.addEventListener("click", async (event) => {
   focusEditor();
   const json = buildSaveJson();
   jsonBackup.value = json;
-  const savedName = await saveTextFile("mapa-croquis.json", json, "application/json;charset=utf-8");
+  const baseName = currentFilename ? String(currentFilename).replace(/\.[^/.]+$/, "") : "Mapini";
+  const suggestedFilename = `${baseName}.json`;
+  const savedName = await saveTextFile(suggestedFilename, json, "application/json;charset=utf-8");
   if (savedName) setCurrentFilename(savedName);
 });
 
@@ -1470,6 +1577,8 @@ function loadJsonFromText(text, filename) {
           console.log(`  -> Ahora existingTool.text="${existingTool.text}"`);
           if (typeof toolData.className === "string") existingTool.className = toolData.className;
           if (typeof toolData.paletteText === "string") existingTool.paletteText = toolData.paletteText;
+          if (typeof toolData.fixedSize === "boolean") existingTool.fixedSize = toolData.fixedSize;
+          if (typeof toolData.unique === "boolean") existingTool.unique = toolData.unique;
         } else {
           registerLoadedTool(toolData);
         }
@@ -1510,6 +1619,7 @@ function loadJsonFromText(text, filename) {
         meta: item.meta || {},
       };
     });
+    normalizeUniqueFixedItems();
     console.log("tools finales antes de renderizar:", tools);
     console.log("items cargados:", items);
     resetInteractionState();
@@ -1692,8 +1802,9 @@ async function exportMapAsPng() {
       contentHeight = canvasHeight;
     }
     const legendWidth = 260;
+    const topBarHeight = 72;
     const exportWidth = contentWidth + legendWidth;
-    const exportHeight = contentHeight;
+    const exportHeight = contentHeight + topBarHeight;
 
     const exportSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     exportSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
@@ -1701,14 +1812,34 @@ async function exportMapAsPng() {
     exportSvg.setAttribute("height", String(exportHeight));
     exportSvg.setAttribute("viewBox", `0 0 ${exportWidth} ${exportHeight}`);
 
-    const legendGroup = createExportLegendGroup(legendWidth, exportHeight);
+    const barBackground = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    barBackground.setAttribute("x", "0");
+    barBackground.setAttribute("y", "0");
+    barBackground.setAttribute("width", String(exportWidth));
+    barBackground.setAttribute("height", String(topBarHeight));
+    barBackground.setAttribute("fill", "#111111");
+    exportSvg.appendChild(barBackground);
+
+    const filenameText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    const displayFilename = currentFilename ? String(currentFilename).replace(/\.[^/.]+$/, "") : "Mapini";
+    filenameText.setAttribute("x", "16");
+    filenameText.setAttribute("y", String(topBarHeight / 2 + 16));
+    filenameText.setAttribute("font-family", "Arial, sans-serif");
+    filenameText.setAttribute("font-size", "56");
+    filenameText.setAttribute("font-weight", "700");
+    filenameText.setAttribute("fill", "#ffffff");
+    filenameText.textContent = displayFilename;
+    exportSvg.appendChild(filenameText);
+
+    const legendGroup = createExportLegendGroup(legendWidth, exportHeight - topBarHeight);
+    legendGroup.setAttribute("transform", `translate(0, ${topBarHeight})`);
     exportSvg.appendChild(legendGroup);
 
     const cloneSvg = svg.cloneNode(true);
     cloneSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
     cloneSvg.setAttribute("viewBox", `${viewBoxX} ${viewBoxY} ${contentWidth} ${contentHeight}`);
     cloneSvg.setAttribute("x", String(legendWidth));
-    cloneSvg.setAttribute("y", "0");
+    cloneSvg.setAttribute("y", String(topBarHeight));
     cloneSvg.setAttribute("width", String(contentWidth));
     cloneSvg.setAttribute("height", String(contentHeight));
     cloneSvg.querySelectorAll("#grid line").forEach((line) => line.setAttribute("stroke", "#dddddd"));

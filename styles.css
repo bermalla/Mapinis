@@ -150,6 +150,7 @@ aside {
 .swatch.obstacle { background: #444444; color: white; }
 .swatch.mini { background: #ffc0c0; }
 .swatch.start { background: #fff4b8; }
+.swatch.pov3d { background: #d8f3ff; color: #0b3554; }
 .swatch.statusBlock { background: #ffd84d; }
 .swatch.text { background: transparent; border-style: dashed; }
 
@@ -213,7 +214,7 @@ svg {
   outline: none;
 }
 
-..status {
+.status {
   position: absolute;
   left: 10px;
   bottom: 10px;
@@ -368,3 +369,32 @@ svg {
 }
 
 .file-input { display: none; }
+
+/* Viewer 3D styles */
+.viewer-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 60;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+.viewer-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  color: #fff;
+}
+.viewer-topbar button {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.viewer-container {
+  width: 100%;
+  height: calc(100vh - 52px);
+}
+
+.viewer-modal[hidden] { display: none; }
