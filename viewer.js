@@ -15,7 +15,7 @@
   const playerHeight = 1.62;
   const baseMoveSpeed = 4.3;
   const sprintMultiplier = 1.3;
-  const blockHeight = 4;
+  const blockHeight = 3;
   const minimapZoom = 7.5;
   const playerRadius = 0.3;
   const obstacleScale = 1;
@@ -168,24 +168,13 @@
     solidObstacles = buildSolidObstacles(appItems, snapshot.showNotes);
     if (!appItems.length) return;
 
+    const wallThickness = 0.14;
     const ceilingMaterial = makeMaterial(0xf8f8f4, THREE.DoubleSide);
-    const blockGeometry = new THREE.BoxGeometry(minecraftBlockSize, minecraftBlockSize, minecraftBlockSize);
+    const cellGeometry = new THREE.PlaneGeometry(cellSize, cellSize);
+    const wallZGeometry = new THREE.BoxGeometry(cellSize, blockHeight, wallThickness);
+    const wallXGeometry = new THREE.BoxGeometry(wallThickness, blockHeight, cellSize);
     const obstacleGeometry = new THREE.BoxGeometry(cellSize * obstacleScale, cellSize * obstacleScale, cellSize * obstacleScale);
     const occupiedCells = collisionCells;
-
-    function addBlock(x, y, z, material, edgeColor) {
-      const block = new THREE.Mesh(blockGeometry, material);
-      block.position.set(x, y, z);
-      objectsGroup.add(block);
-      if (typeof edgeColor === 'number') addEdges(block, edgeColor);
-      return block;
-    }
-
-    function addWallColumn(x, z, material) {
-      for (let y = 0; y < blockHeight; y += 1) {
-        addBlock(x, y + minecraftBlockSize / 2, z, material, 0x333333);
-      }
-    }
 
     occupiedCells.forEach((cell) => {
       const item = cell.item;
@@ -197,23 +186,42 @@
       const centerX = minX + cellSize / 2;
       const centerZ = minZ + cellSize / 2;
 
-      addBlock(centerX, -minecraftBlockSize / 2, centerZ, floorMaterial);
-      addBlock(centerX, blockHeight + minecraftBlockSize / 2, centerZ, ceilingMaterial);
+      const floor = new THREE.Mesh(cellGeometry, floorMaterial);
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.set(centerX, 0.01, centerZ);
+      objectsGroup.add(floor);
+
+      const ceiling = new THREE.Mesh(cellGeometry, ceilingMaterial);
+      ceiling.rotation.x = Math.PI / 2;
+      ceiling.position.set(centerX, blockHeight - 0.01, centerZ);
+      objectsGroup.add(ceiling);
 
       if (!occupiedCells.has(cellKey(cell.col, cell.row - 1))) {
-        addWallColumn(centerX, minZ - cellSize / 2, wallMaterial);
+        const northWall = new THREE.Mesh(wallZGeometry, wallMaterial);
+        northWall.position.set(centerX, blockHeight / 2, minZ + wallThickness / 2);
+        objectsGroup.add(northWall);
+        addEdges(northWall, 0x333333);
       }
 
       if (!occupiedCells.has(cellKey(cell.col, cell.row + 1))) {
-        addWallColumn(centerX, minZ + cellSize + cellSize / 2, wallMaterial);
+        const southWall = new THREE.Mesh(wallZGeometry, wallMaterial);
+        southWall.position.set(centerX, blockHeight / 2, minZ + cellSize - wallThickness / 2);
+        objectsGroup.add(southWall);
+        addEdges(southWall, 0x333333);
       }
 
       if (!occupiedCells.has(cellKey(cell.col - 1, cell.row))) {
-        addWallColumn(minX - cellSize / 2, centerZ, wallMaterial);
+        const westWall = new THREE.Mesh(wallXGeometry, wallMaterial);
+        westWall.position.set(minX + wallThickness / 2, blockHeight / 2, centerZ);
+        objectsGroup.add(westWall);
+        addEdges(westWall, 0x333333);
       }
 
       if (!occupiedCells.has(cellKey(cell.col + 1, cell.row))) {
-        addWallColumn(minX + cellSize + cellSize / 2, centerZ, wallMaterial);
+        const eastWall = new THREE.Mesh(wallXGeometry, wallMaterial);
+        eastWall.position.set(minX + cellSize - wallThickness / 2, blockHeight / 2, centerZ);
+        objectsGroup.add(eastWall);
+        addEdges(eastWall, 0x333333);
       }
     });
 
