@@ -393,8 +393,23 @@ svg {
   border: 1px solid rgba(255,255,255,0.12);
 }
 .viewer-container {
+  position: relative;
   width: 100%;
   height: calc(100vh - 52px);
+}
+
+.viewer-minimap {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: min(240px, calc(100vw - 28px));
+  aspect-ratio: 100 / 72;
+  border: 1px solid rgba(255,255,255,0.45);
+  border-radius: 8px;
+  background: rgba(230,230,230,0.94);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.32);
+  pointer-events: none;
+  z-index: 2;
 }
 
 .viewer-modal[hidden] { display: none; }
