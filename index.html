@@ -48,10 +48,18 @@
             <button id="addLayerBelow" type="button">Añadir abajo</button>
             <button id="addLayerAbove" type="button">Añadir arriba</button>
           </div>
+          <label>
+            Referencia visible
+            <select id="layerReferenceMode">
+              <option value="none">Ninguna</option>
+              <option value="below">Capa inferior</option>
+              <option value="above">Capa superior</option>
+            </select>
+          </label>
           <button id="deleteCurrentLayer" type="button" class="danger layer-full-button">Quitar capa actual</button>
         </div>
         <p class="hint">
-          Solo se edita la capa activa. Las capas inferiores se ven como referencia tenue.
+          Solo se edita la capa activa. Podés mostrar una capa adyacente como referencia tenue.
         </p>
       </div>
 

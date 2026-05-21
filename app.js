@@ -27,6 +27,7 @@ let activeTool = "path";
 let items = [];
 let layers = [0];
 let currentLayer = 0;
+let layerReferenceMode = "none";
 let selectedId = null;
 let selectedIds = [];
 let editingId = null;
@@ -60,6 +61,7 @@ const goLayerDownBtn = document.getElementById("goLayerDown");
 const addLayerAboveBtn = document.getElementById("addLayerAbove");
 const addLayerBelowBtn = document.getElementById("addLayerBelow");
 const deleteCurrentLayerBtn = document.getElementById("deleteCurrentLayer");
+const layerReferenceModeInput = document.getElementById("layerReferenceMode");
 const layerUp = document.getElementById("layerUp");
 const layerDown = document.getElementById("layerDown");
 const toggleShowNotesBtn = document.getElementById("toggleShowNotes");
@@ -216,6 +218,7 @@ function pushUndoState() {
     tools: cloneState(tools),
     layers: cloneState(layers),
     currentLayer,
+    layerReferenceMode,
     activeTool,
     selectedId,
     selectedIds: cloneState(selectedIds),
@@ -240,6 +243,7 @@ function undoLastAction() {
   tools = previous.tools;
   layers = Array.isArray(previous.layers) ? previous.layers : [0];
   currentLayer = normalizeLayerValue(previous.currentLayer);
+  layerReferenceMode = previous.layerReferenceMode || "none";
   normalizeLayers();
   rebuildToolMap();
   activeTool = previous.activeTool;
@@ -274,8 +278,9 @@ function isItemOnCurrentLayer(item) {
   return getItemLayer(item) === currentLayer;
 }
 
-function isItemOnLowerLayer(item) {
-  return getItemLayer(item) < currentLayer;
+function isItemOnReferenceLayer(item) {
+  const referenceLayer = getReferenceLayer();
+  return referenceLayer !== null && getItemLayer(item) === referenceLayer;
 }
 
 function isItemEditable(item) {
@@ -294,6 +299,20 @@ function filterSelectionToCurrentLayer() {
 function updateLayerControls() {
   normalizeLayers();
   if (currentLayerLabel) currentLayerLabel.textContent = String(currentLayer);
+  if (layerReferenceModeInput) layerReferenceModeInput.value = layerReferenceMode;
+}
+
+function getReferenceLayer() {
+  normalizeLayers();
+  if (layerReferenceMode === "below") {
+    const below = layers.filter((layer) => layer < currentLayer);
+    return below.length ? below[below.length - 1] : null;
+  }
+  if (layerReferenceMode === "above") {
+    const above = layers.filter((layer) => layer > currentLayer);
+    return above.length ? above[0] : null;
+  }
+  return null;
 }
 
 function setCurrentLayer(layer) {
@@ -444,6 +463,7 @@ function buildSaveData() {
     grid: { cols, rows, gridSize },
     layers: cloneState(layers),
     currentLayer,
+    layerReferenceMode,
     toolOrder: tools.map((tool) => tool.id),
     blockCatalog: tools
       .filter((tool) => tool.id !== "select")
@@ -495,6 +515,7 @@ window.MapinisEditor = {
       showNotes,
       layers: cloneState(layers),
       currentLayer,
+      layerReferenceMode,
     };
   },
 };
@@ -613,7 +634,8 @@ function isItemVisible(item) {
   const noteVisible = !(item.meta && item.meta.notes) || showNotes;
   if (!noteVisible) return false;
   const layer = getItemLayer(item);
-  return layer === currentLayer || layer < currentLayer;
+  const referenceLayer = getReferenceLayer();
+  return layer === currentLayer || layer === referenceLayer;
 }
 
 function deleteSelectedItem() {
@@ -1084,17 +1106,14 @@ function renderItem(item, isPreview = false, pathOwners = buildPathCellOwners(),
 
 function renderItems() {
   const visibleItems = items.filter(isItemVisible);
-  const lowerItems = visibleItems.filter(isItemOnLowerLayer);
+  const referenceItems = visibleItems.filter(isItemOnReferenceLayer);
   const currentItems = visibleItems.filter(isItemOnCurrentLayer);
-  const lowerByLayer = Array.from(new Set(lowerItems.map(getItemLayer))).sort((a, b) => a - b);
-  const lowerMarkup = lowerByLayer.map((layer) => {
-    const layerItems = lowerItems.filter((item) => getItemLayer(item) === layer);
-    const owners = buildPathCellOwners(layerItems);
-    return `<g class="layer-reference" data-layer="${layer}">${layerItems.map((item) => renderItem(item, false, owners, { referenceLayer: true })).join("")}</g>`;
-  }).join("");
+  const referenceLayer = getReferenceLayer();
+  const referenceOwners = buildPathCellOwners(referenceItems);
+  const referenceMarkup = referenceLayer === null ? "" : `<g class="layer-reference" data-layer="${referenceLayer}">${referenceItems.map((item) => renderItem(item, false, referenceOwners, { referenceLayer: true })).join("")}</g>`;
   const currentOwners = buildPathCellOwners(currentItems);
   const currentMarkup = currentItems.map((item) => renderItem(item, false, currentOwners)).join("");
-  return `${lowerMarkup}${currentMarkup}`;
+  return `${referenceMarkup}${currentMarkup}`;
 }
 
 function renderSelectionBox() {
@@ -1557,6 +1576,15 @@ function updateSelectedPropertiesLive() {
   applySelectedProperties(false);
 }
 
+if (layerReferenceModeInput) {
+  layerReferenceModeInput.addEventListener("change", (event) => {
+    layerReferenceMode = event.target.value || "none";
+    render();
+    const label = layerReferenceMode === "below" ? "capa inferior" : layerReferenceMode === "above" ? "capa superior" : "ninguna capa";
+    showStatus(`Referencia visible: ${label}`);
+  });
+}
+
 [propText, propTextSize].forEach((input) => {
   input.addEventListener("input", updateSelectedPropertiesLive);
   input.addEventListener("keydown", (event) => {
@@ -1672,6 +1700,7 @@ document.getElementById("clearMap").addEventListener("click", (event) => {
   items = [];
   layers = [0];
   currentLayer = 0;
+  layerReferenceMode = "none";
   resetInteractionState();
   centerViewPending = true;
   render();
@@ -1759,6 +1788,7 @@ function loadJsonFromText(text, filename) {
 
     layers = Array.isArray(data.layers) ? data.layers.map(normalizeLayerValue) : [0];
     currentLayer = normalizeLayerValue(data.currentLayer);
+    layerReferenceMode = typeof data.layerReferenceMode === "string" ? data.layerReferenceMode : "none";
 
     items = data.items.map((item) => {
       const tool = getToolOrFallback(item.type || "path");
