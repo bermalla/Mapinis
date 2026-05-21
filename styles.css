@@ -156,6 +156,27 @@ aside {
 
 .properties { display: grid; gap: 8px; }
 
+.layer-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.layer-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #c8c8c8;
+  border-radius: 6px;
+  background: #f8f8f8;
+  font-size: 13px;
+}
+
+.layer-current strong {
+  font-size: 18px;
+}
+
 .layer-buttons {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -164,6 +185,12 @@ aside {
 
 .layer-buttons button {
   padding: 5px 6px;
+  font-size: 12px;
+}
+
+.layer-full-button {
+  width: 100%;
+  padding: 6px 8px;
   font-size: 12px;
 }
 

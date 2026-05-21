@@ -37,6 +37,25 @@
       </div>
 
       <div class="section">
+        <h2>Capas</h2>
+        <div class="layer-panel">
+          <div class="layer-current">Capa <strong id="currentLayerLabel">0</strong></div>
+          <div class="layer-buttons">
+            <button id="goLayerDown" type="button">Bajar capa</button>
+            <button id="goLayerUp" type="button">Subir capa</button>
+          </div>
+          <div class="layer-buttons">
+            <button id="addLayerBelow" type="button">Añadir abajo</button>
+            <button id="addLayerAbove" type="button">Añadir arriba</button>
+          </div>
+          <button id="deleteCurrentLayer" type="button" class="danger layer-full-button">Quitar capa actual</button>
+        </div>
+        <p class="hint">
+          Solo se edita la capa activa. Las capas inferiores se ven como referencia tenue.
+        </p>
+      </div>
+
+      <div class="section">
         <h2>Propiedades del seleccionado</h2>
         <div class="properties">
           <label>
@@ -52,8 +71,8 @@
             <input id="propNotes" type="checkbox" />
           </label>
           <div class="layer-buttons">
-            <button id="layerDown" type="button">Bajar capa</button>
-            <button id="layerUp" type="button">Subir capa</button>
+            <button id="layerDown" type="button">Enviar atrás</button>
+            <button id="layerUp" type="button">Traer adelante</button>
           </div>
           <div class="layer-buttons">
             <button id="toggleShowNotes" type="button">Ocultar notas</button>

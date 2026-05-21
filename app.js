@@ -25,6 +25,8 @@ let tools = toolDefinitions.map((tool) => ({ ...tool }));
 let toolMap = new Map(tools.map((tool) => [tool.id, tool]));
 let activeTool = "path";
 let items = [];
+let layers = [0];
+let currentLayer = 0;
 let selectedId = null;
 let selectedIds = [];
 let editingId = null;
@@ -52,6 +54,12 @@ const status = document.getElementById("status");
 const propText = document.getElementById("propText");
 const propTextSize = document.getElementById("propTextSize");
 const propNotes = document.getElementById("propNotes");
+const currentLayerLabel = document.getElementById("currentLayerLabel");
+const goLayerUpBtn = document.getElementById("goLayerUp");
+const goLayerDownBtn = document.getElementById("goLayerDown");
+const addLayerAboveBtn = document.getElementById("addLayerAbove");
+const addLayerBelowBtn = document.getElementById("addLayerBelow");
+const deleteCurrentLayerBtn = document.getElementById("deleteCurrentLayer");
 const layerUp = document.getElementById("layerUp");
 const layerDown = document.getElementById("layerDown");
 const toggleShowNotesBtn = document.getElementById("toggleShowNotes");
@@ -171,11 +179,43 @@ function cloneState(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function normalizeLayerValue(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.trunc(numeric);
+}
+
+function normalizeLayers() {
+  const values = new Set([0, normalizeLayerValue(currentLayer)]);
+  if (Array.isArray(layers)) {
+    layers.forEach((layer) => values.add(normalizeLayerValue(layer)));
+  }
+  items.forEach((item) => values.add(normalizeLayerValue(item.layer)));
+  layers = Array.from(values).sort((a, b) => a - b);
+  currentLayer = normalizeLayerValue(currentLayer);
+}
+
+function ensureLayer(layer) {
+  currentLayer = normalizeLayerValue(currentLayer);
+  const normalized = normalizeLayerValue(layer);
+  if (!layers.includes(normalized)) {
+    layers.push(normalized);
+    layers.sort((a, b) => a - b);
+  }
+  return normalized;
+}
+
+function getItemLayer(item) {
+  return item ? normalizeLayerValue(item.layer) : 0;
+}
+
 function pushUndoState() {
   markDirty();
   undoStack.push({
     items: cloneState(items),
     tools: cloneState(tools),
+    layers: cloneState(layers),
+    currentLayer,
     activeTool,
     selectedId,
     selectedIds: cloneState(selectedIds),
@@ -198,6 +238,9 @@ function undoLastAction() {
 
   items = previous.items;
   tools = previous.tools;
+  layers = Array.isArray(previous.layers) ? previous.layers : [0];
+  currentLayer = normalizeLayerValue(previous.currentLayer);
+  normalizeLayers();
   rebuildToolMap();
   activeTool = previous.activeTool;
   selectedId = previous.selectedId;
@@ -225,6 +268,63 @@ function resetInteractionState() {
   resizeDrag = null;
   previewRect = null;
   mouseDownState = null;
+}
+
+function isItemOnCurrentLayer(item) {
+  return getItemLayer(item) === currentLayer;
+}
+
+function isItemOnLowerLayer(item) {
+  return getItemLayer(item) < currentLayer;
+}
+
+function isItemEditable(item) {
+  return isItemVisible(item) && isItemOnCurrentLayer(item);
+}
+
+function filterSelectionToCurrentLayer() {
+  selectedIds = selectedIds.filter((id) => {
+    const item = items.find((candidate) => candidate.id === id);
+    return item && isItemEditable(item);
+  });
+  selectedId = selectedIds[0] || null;
+  if (!selectedId || editingId !== selectedId) editingId = null;
+}
+
+function updateLayerControls() {
+  normalizeLayers();
+  if (currentLayerLabel) currentLayerLabel.textContent = String(currentLayer);
+}
+
+function setCurrentLayer(layer) {
+  currentLayer = ensureLayer(layer);
+  filterSelectionToCurrentLayer();
+  render();
+  showStatus(`Capa ${currentLayer}`);
+}
+
+function addMapLayer(offset) {
+  const target = ensureLayer(currentLayer + offset);
+  currentLayer = target;
+  filterSelectionToCurrentLayer();
+  render();
+  showStatus(`Capa ${currentLayer} añadida`);
+}
+
+function deleteActiveMapLayer() {
+  const hasItems = items.some((item) => getItemLayer(item) === currentLayer);
+  if (hasItems && !confirm(`¿Quitar la capa ${currentLayer} y borrar sus bloques?`)) return;
+  pushUndoState();
+  items = items.filter((item) => getItemLayer(item) !== currentLayer);
+  layers = layers.filter((layer) => normalizeLayerValue(layer) !== currentLayer);
+  if (!layers.length) layers = [0];
+  currentLayer = layers.includes(0) ? 0 : layers.reduce((closest, layer) => (
+    Math.abs(layer) < Math.abs(closest) ? layer : closest
+  ), layers[0]);
+  resetInteractionState();
+  normalizeLayers();
+  render();
+  showStatus(`Capa eliminada. Capa actual: ${currentLayer}`);
 }
 
 function getDesignBounds() {
@@ -267,12 +367,13 @@ function centerMapView() {
 }
 
 function getExportBounds() {
-  if (!items || !items.length) return null;
+  const exportItems = items.filter(isItemVisible);
+  if (!exportItems.length) return null;
   let left = Infinity;
   let top = Infinity;
   let right = -Infinity;
   let bottom = -Infinity;
-  items.forEach((item) => {
+  exportItems.forEach((item) => {
     left = Math.min(left, item.col);
     top = Math.min(top, item.row);
     right = Math.max(right, item.col + item.w - 1);
@@ -335,11 +436,14 @@ function focusSelectedProperties() {
 }
 
 function buildSaveData() {
+  normalizeLayers();
   return {
     schema: "croquis-map-editor",
-    version: 8,
+    version: 9,
     savedAt: new Date().toISOString(),
     grid: { cols, rows, gridSize },
+    layers: cloneState(layers),
+    currentLayer,
     toolOrder: tools.map((tool) => tool.id),
     blockCatalog: tools
       .filter((tool) => tool.id !== "select")
@@ -364,6 +468,7 @@ function buildSaveData() {
         type: item.type,
         col: item.col,
         row: item.row,
+        layer: getItemLayer(item),
         w: item.w,
         h: item.h,
         text: item.text,
@@ -388,6 +493,8 @@ window.MapinisEditor = {
       items: cloneState(items),
       tools: cloneState(tools),
       showNotes,
+      layers: cloneState(layers),
+      currentLayer,
     };
   },
 };
@@ -436,6 +543,7 @@ function createItem(toolId, col, row, w = 1, h = 1) {
     type: tool.id,
     col,
     row,
+    layer: currentLayer,
     w: itemWidth,
     h: itemHeight,
     fill: tool.fill,
@@ -453,6 +561,7 @@ function normalizeUniqueFixedItems() {
   items = items.filter((item) => {
     const tool = getTool(item.type);
     if (!tool) return true;
+    item.layer = getItemLayer(item);
     if (tool.fixedSize) {
       item.w = 1;
       item.h = 1;
@@ -472,6 +581,7 @@ function placeOrMoveUniqueItem(toolId, col, row) {
   if (existing) {
     existing.col = Math.max(0, Math.min(cols - 1, col));
     existing.row = Math.max(0, Math.min(rows - 1, row));
+    existing.layer = currentLayer;
     existing.w = 1;
     existing.h = 1;
     existing.fill = tool.fill;
@@ -493,13 +603,17 @@ function placeOrMoveUniqueItem(toolId, col, row) {
 function getItemAtCell(col, row) {
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i];
-    if ((!item.meta || !item.meta.notes || showNotes) && col >= item.col && col < item.col + item.w && row >= item.row && row < item.row + item.h) return item;
+    if (isItemEditable(item) && col >= item.col && col < item.col + item.w && row >= item.row && row < item.row + item.h) return item;
   }
   return null;
 }
 
 function isItemVisible(item) {
-  return !(item && item.meta && item.meta.notes) || showNotes;
+  if (!item) return false;
+  const noteVisible = !(item.meta && item.meta.notes) || showNotes;
+  if (!noteVisible) return false;
+  const layer = getItemLayer(item);
+  return layer === currentLayer || layer < currentLayer;
 }
 
 function deleteSelectedItem() {
@@ -796,10 +910,10 @@ function getCellsForItem(item) {
   return cells;
 }
 
-function buildPathCellOwners() {
+function buildPathCellOwners(sourceItems = items.filter(isItemVisible)) {
   const owners = new Map();
-  items
-    .filter((item) => item.type === "path" && isItemVisible(item))
+  sourceItems
+    .filter((item) => item.type === "path")
     .forEach((item) => {
       getCellsForItem(item).forEach((cell) => {
         const key = `${cell.col},${cell.row}`;
@@ -891,14 +1005,15 @@ function resizeItemFromCell(item, edge, cell, original) {
   item.h = Math.max(1, newBottom - newRow + 1);
 }
 
-function renderPathItem(item, isPreview, pathOwners) {
+function renderPathItem(item, isPreview, pathOwners, options = {}) {
   const x = item.col * gridSize;
   const y = item.row * gridSize;
   const w = item.w * gridSize;
   const h = item.h * gridSize;
-  const isSelected = selectedIds.includes(item.id);
+  const referenceLayer = Boolean(options.referenceLayer);
+  const isSelected = !referenceLayer && selectedIds.includes(item.id);
   const isEditing = item.id === editingId;
-  const opacity = isPreview ? 0.55 : 1;
+  const opacity = isPreview ? 0.55 : referenceLayer ? 0.18 : 1;
   const strokeColor = isPreview ? "#ff9f1c" : item.stroke;
   const strokeWidth = isPreview ? 3 : 1.5;
   const cells = getCellsForItem(item);
@@ -930,7 +1045,7 @@ function renderPathItem(item, isPreview, pathOwners) {
   const selectionMarkup = isSelected && !isPreview ? `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#ff9f1c" stroke-width="3" />${isEditing && !isFixedSizeTool(item.type) ? renderResizeHandles(item) : ""}` : "";
 
   return `
-    <g class="item" data-id="${item.id || "preview"}" opacity="${opacity}" style="cursor:move;">
+    <g class="item${referenceLayer ? " item-reference" : ""}" data-id="${item.id || "preview"}" opacity="${opacity}" style="cursor:${referenceLayer ? "default" : "move"};">
       <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${item.fill}" stroke="none" />
       ${borders}
       ${textMarkup}
@@ -939,18 +1054,19 @@ function renderPathItem(item, isPreview, pathOwners) {
   `;
 }
 
-function renderItem(item, isPreview = false, pathOwners = buildPathCellOwners()) {
-  if (item.type === "path") return renderPathItem(item, isPreview, pathOwners);
+function renderItem(item, isPreview = false, pathOwners = buildPathCellOwners(), options = {}) {
+  if (item.type === "path") return renderPathItem(item, isPreview, pathOwners, options);
 
   const x = item.col * gridSize;
   const y = item.row * gridSize;
   const w = item.w * gridSize;
   const h = item.h * gridSize;
-  const isSelected = selectedIds.includes(item.id);
+  const referenceLayer = Boolean(options.referenceLayer);
+  const isSelected = !referenceLayer && selectedIds.includes(item.id);
   const isEditing = item.id === editingId;
   const stroke = isPreview ? "#ff9f1c" : isSelected ? "#ff9f1c" : item.stroke;
   const strokeWidth = isPreview || isSelected ? 3 : 1.5;
-  const opacity = isPreview ? 0.55 : 1;
+  const opacity = isPreview ? 0.55 : referenceLayer ? 0.18 : 1;
   const centerX = x + w / 2;
   const centerY = y + h / 2;
   const textColor = item.textColor || (["closed", "down", "drop", "up", "obstacle"].includes(item.type) ? "#ffffff" : "#1f4fa3");
@@ -958,7 +1074,7 @@ function renderItem(item, isPreview = false, pathOwners = buildPathCellOwners())
   const textMarkup = item.text ? renderWrappedText(item, x, y, w, h, centerX, centerY, textSize, textColor) : "";
 
   return `
-    <g class="item" data-id="${item.id || "preview"}" opacity="${opacity}" style="cursor:move;">
+    <g class="item${referenceLayer ? " item-reference" : ""}" data-id="${item.id || "preview"}" opacity="${opacity}" style="cursor:${referenceLayer ? "default" : "move"};">
       <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${item.fill}" stroke="${stroke}" stroke-width="${strokeWidth}" />
       ${textMarkup}
       ${isSelected && isEditing && !isPreview && !isFixedSizeTool(item.type) ? renderResizeHandles(item) : ""}
@@ -968,8 +1084,17 @@ function renderItem(item, isPreview = false, pathOwners = buildPathCellOwners())
 
 function renderItems() {
   const visibleItems = items.filter(isItemVisible);
-  const owners = buildPathCellOwners();
-  return visibleItems.map((item) => renderItem(item, false, owners)).join("");
+  const lowerItems = visibleItems.filter(isItemOnLowerLayer);
+  const currentItems = visibleItems.filter(isItemOnCurrentLayer);
+  const lowerByLayer = Array.from(new Set(lowerItems.map(getItemLayer))).sort((a, b) => a - b);
+  const lowerMarkup = lowerByLayer.map((layer) => {
+    const layerItems = lowerItems.filter((item) => getItemLayer(item) === layer);
+    const owners = buildPathCellOwners(layerItems);
+    return `<g class="layer-reference" data-layer="${layer}">${layerItems.map((item) => renderItem(item, false, owners, { referenceLayer: true })).join("")}</g>`;
+  }).join("");
+  const currentOwners = buildPathCellOwners(currentItems);
+  const currentMarkup = currentItems.map((item) => renderItem(item, false, currentOwners)).join("");
+  return `${lowerMarkup}${currentMarkup}`;
 }
 
 function renderSelectionBox() {
@@ -997,10 +1122,12 @@ function renderPreview() {
     rotation: 0,
     textSize: tool.textSize || (tool.id === "note" ? 14 : 18),
     textColor: tool.textColor || "#1f4fa3",
+    layer: currentLayer,
   }, true);
 }
 
 function render() {
+  normalizeLayers();
   svg.setAttribute("viewBox", `0 0 ${canvasWidth} ${canvasHeight}`);
   svg.style.width = `${canvasWidth * zoomLevel}px`;
   svg.style.height = `${canvasHeight * zoomLevel}px`;
@@ -1012,6 +1139,7 @@ function render() {
     ${renderPreview()}
   `;
   renderPalette();
+  updateLayerControls();
   updatePropertiesPanel();
   const statusMessage = selectionDrag && previewRect
     ? `Seleccionando ${previewRect.w}x${previewRect.h}`
@@ -1021,7 +1149,7 @@ function render() {
     ? `${selectedIds.length} elementos seleccionados`
     : selectedId
     ? "Elemento seleccionado"
-    : `Herramienta: ${getToolOrFallback(activeTool).label}`;
+    : `Capa ${currentLayer} · Herramienta: ${getToolOrFallback(activeTool).label}`;
   showStatus(statusMessage);
   updateZoomIndicator();
   if (centerViewPending) centerMapView();
@@ -1263,7 +1391,7 @@ window.addEventListener("mouseup", () => {
   if (selectionDrag) {
     const rect = previewRect || rectFromCells(selectionDrag.startCell, selectionDrag.currentCell);
     const selected = items.filter((item) => {
-      if (!isItemVisible(item)) return false;
+      if (!isItemEditable(item)) return false;
       const itemRect = {
         left: item.col,
         top: item.row,
@@ -1392,6 +1520,7 @@ document.addEventListener("keydown", (event) => {
     const duplicate = {
       ...selected,
       id: uid(),
+      layer: currentLayer,
       col: Math.min(cols - selected.w, selected.col + 1),
       row: Math.min(rows - selected.h, selected.row + 1),
     };
@@ -1483,15 +1612,42 @@ function moveSelectedLayer(direction) {
   if (index < 0) return;
   const targetIndex = index + direction;
   if (targetIndex < 0 || targetIndex >= items.length) {
-    showStatus(direction > 0 ? "El bloque ya está arriba" : "El bloque ya está abajo");
+    showStatus(direction > 0 ? "El bloque ya está adelante" : "El bloque ya está atrás");
     return;
   }
   pushUndoState();
   const [item] = items.splice(index, 1);
   items.splice(targetIndex, 0, item);
   render();
-  showStatus(direction > 0 ? "Bloque subido de capa" : "Bloque bajado de capa");
+  showStatus(direction > 0 ? "Bloque traído adelante" : "Bloque enviado atrás");
 }
+
+goLayerUpBtn.addEventListener("click", (event) => {
+  event.preventDefault();
+  setCurrentLayer(currentLayer + 1);
+});
+
+goLayerDownBtn.addEventListener("click", (event) => {
+  event.preventDefault();
+  setCurrentLayer(currentLayer - 1);
+});
+
+addLayerAboveBtn.addEventListener("click", (event) => {
+  event.preventDefault();
+  pushUndoState();
+  addMapLayer(1);
+});
+
+addLayerBelowBtn.addEventListener("click", (event) => {
+  event.preventDefault();
+  pushUndoState();
+  addMapLayer(-1);
+});
+
+deleteCurrentLayerBtn.addEventListener("click", (event) => {
+  event.preventDefault();
+  deleteActiveMapLayer();
+});
 
 layerUp.addEventListener("click", (event) => {
   event.preventDefault();
@@ -1514,6 +1670,8 @@ document.getElementById("clearMap").addEventListener("click", (event) => {
   if (!confirm("¿Limpiar todo el mapa? Esta acción borra todos los bloques.")) return;
   pushUndoState();
   items = [];
+  layers = [0];
+  currentLayer = 0;
   resetInteractionState();
   centerViewPending = true;
   render();
@@ -1599,6 +1757,9 @@ function loadJsonFromText(text, filename) {
       rebuildToolMap();
     }
 
+    layers = Array.isArray(data.layers) ? data.layers.map(normalizeLayerValue) : [0];
+    currentLayer = normalizeLayerValue(data.currentLayer);
+
     items = data.items.map((item) => {
       const tool = getToolOrFallback(item.type || "path");
       const style = item.style || {};
@@ -1608,6 +1769,7 @@ function loadJsonFromText(text, filename) {
         type: item.type || tool.id,
         col: Math.max(0, Math.min(cols - 1, Number(item.col) || 0)),
         row: Math.max(0, Math.min(rows - 1, Number(item.row) || 0)),
+        layer: normalizeLayerValue(item.layer),
         w: Math.max(1, Math.min(cols, Number(item.w) || 1)),
         h: Math.max(1, Math.min(rows, Number(item.h) || 1)),
         fill: style.fill || item.fill || tool.fill,
@@ -1620,6 +1782,7 @@ function loadJsonFromText(text, filename) {
       };
     });
     normalizeUniqueFixedItems();
+    normalizeLayers();
     console.log("tools finales antes de renderizar:", tools);
     console.log("items cargados:", items);
     resetInteractionState();
