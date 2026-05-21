@@ -10,15 +10,14 @@
   let velocity = null;
   let direction = null;
   let prevTime = performance.now();
-  const minecraftBlockSize = 1;
-  const cellSize = minecraftBlockSize;
-  const playerHeight = 1.62;
-  const baseMoveSpeed = 4.3;
-  const sprintMultiplier = 1.3;
-  const blockHeight = 3;
+  const cellSize = 3.2;
+  const playerHeight = 0.55;
+  const baseMoveSpeed = 30.0;
+  const sprintMultiplier = 2.4;
+  const blockHeight = 3.1;
   const minimapZoom = 7.5;
-  const playerRadius = 0.3;
-  const obstacleScale = 1;
+  const playerRadius = cellSize * 0.18;
+  const obstacleScale = 0.7;
 
   const viewerModal = document.getElementById('viewerModal');
   const viewerContainer = document.getElementById('viewerContainer');
